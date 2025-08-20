@@ -1,0 +1,292 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Meme Forge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui; margin: 24px; max-width: 980px }
+    .row { display: grid; gap: 16px; grid-template-columns: 1fr 1fr }
+    .card { border:1px solid #eee; border-radius:12px; padding:12px }
+    canvas, img { max-width:100%; border-radius:12px; border:1px solid #ddd }
+    input, select, button { padding:8px 10px; border-radius:10px; border:1px solid #ddd }
+    button { cursor:pointer }
+    .hidden{ display:none }
+    .likes { display:flex; align-items:center; gap:8px }
+  </style>
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const SUPABASE_URL = 'https://ycmozdaoyqarwwpxudxa.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbW96ZGFveXFhcnd3cHh1ZHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3MTkyNTgsImV4cCI6MjA3MTI5NTI1OH0.nFCCRHbEWibEfS5fdV77s0iyaxr8TsG0q-LRdK0zhAg';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ---------- Elements ----------
+    const $ = (q) => document.querySelector(q);
+    const authView = $('#authView');
+    const setupView = $('#setupView');
+    const verifyView = $('#verifyView');
+    const appView = $('#appView');
+
+    // Auth
+    const emailIn = $('#email'); const passIn = $('#pass');
+    const signUpBtn = $('#signUp'); const signInBtn = $('#signIn'); const signOutBtn = $('#signOut');
+
+    // Meme password setup
+    const sTpl = $('#sTpl'), sTop = $('#sTop'), sBot = $('#sBot'), sSave = $('#sSave');
+
+    // Meme password verify each login
+    const vTpl = $('#vTpl'), vTop = $('#vTop'), vBot = $('#vBot'), vCheck = $('#vCheck');
+
+    // Editor
+    const tSelect = $('#template'); const topIn = $('#top'); const botIn = $('#bottom');
+    const canvas = $('#c'); const ctx = canvas.getContext('2d');
+    const publishBtn = $('#publish'); const feed = $('#feed');
+
+    // Templates (add your files in /templates)
+    const templates = {
+      drake: 'templates/drake.jpg',
+      distracted: 'templates/distracted.jpg',
+      doge: 'templates/doge.jpg'
+    };
+
+    // ---------- UI state ----------
+    async function refreshSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return show(authView);
+
+      // does user have meme secret saved?
+      const { data: prof } = await supabase.from('profiles').select('meme_template_key').single();
+      if (!prof || !prof.meme_template_key) {
+        show(setupView);
+        return;
+      }
+      // force verify on every login (and also on refresh if you want)
+      show(verifyView);
+    }
+
+    function show(view) {
+      [authView, setupView, verifyView, appView].forEach(v => v.classList.add('hidden'));
+      view.classList.remove('hidden');
+    }
+
+    // ---------- Auth ----------
+    signUpBtn.onclick = async () => {
+      const { error } = await supabase.auth.signUp({ email: emailIn.value, password: passIn.value });
+      if (error) return alert(error.message);
+      alert('Account created. Sign in now.');
+    };
+    signInBtn.onclick = async () => {
+      const { error } = await supabase.auth.signInWithPassword({ email: emailIn.value, password: passIn.value });
+      if (error) return alert(error.message);
+      await refreshSession();
+    };
+    signOutBtn.onclick = async () => {
+      await supabase.auth.signOut();
+      show(authView);
+    };
+
+    // ---------- Meme password setup (once) ----------
+    sSave.onclick = async () => {
+      const { error } = await supabase.rpc('set_meme_secret', {
+        template_key: sTpl.value, top_text: sTop.value, bottom_text: sBot.value
+      });
+      if (error) return alert(error.message);
+      alert('Meme password saved!');
+      show(verifyView);
+    };
+
+    // ---------- Verify meme password (each login) ----------
+    vCheck.onclick = async () => {
+      const { data, error } = await supabase.rpc('verify_meme_secret', {
+        template_key: vTpl.value, top_text: vTop.value, bottom_text: vBot.value
+      });
+      if (error) return alert(error.message);
+      if (!data) return alert('Meme password is wrong.');
+      // OK → enter app
+      show(appView);
+      initApp();
+    };
+
+    // ---------- Meme editor ----------
+    let img = new Image();
+    function draw() {
+      if (!img.complete) return;
+      const w = img.width, h = img.height;
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      ctx.font = `${Math.floor(w/10)}px Impact, Arial Black, sans-serif`;
+      ctx.fillStyle = 'white'; ctx.textAlign='center';
+      ctx.lineWidth = Math.ceil(w/200); ctx.strokeStyle='black';
+
+      const pad = Math.floor(h*0.06);
+      const drawLines = (text, y) => {
+        const words = text.toUpperCase().split(/\s+/);
+        let line = '', lines = [];
+        for (const w2 of words) {
+          const test = line ? line + ' ' + w2 : w2;
+          if (ctx.measureText(test).width > w*0.9) { lines.push(line); line = w2; }
+          else line = test;
+        }
+        lines.push(line);
+        lines.forEach((ln,i)=>{
+          const yy = y + i*(parseInt(ctx.font,10)+6);
+          ctx.strokeText(ln, w/2, yy);
+          ctx.fillText(ln, w/2, yy);
+        });
+      };
+      drawLines(topIn.value, pad);
+      drawLines(botIn.value, h - pad - parseInt(ctx.font,10));
+    }
+    function loadTemplate(key) { img = new Image(); img.onload = draw; img.src = templates[key]; }
+
+    tSelect.onchange = () => loadTemplate(tSelect.value);
+    topIn.oninput = draw; botIn.oninput = draw;
+    loadTemplate(tSelect.value);
+
+    // ---------- Publish & Feed ----------
+    async function publish() {
+      publishBtn.disabled = true;
+      try {
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
+        const fileName = `memes/${Date.now()}.png`;
+        const { data: upload, error: upErr } = await supabase.storage.from('memes').upload(fileName, blob, {
+          contentType: 'image/png', upsert: false
+        });
+        if (upErr) throw upErr;
+        const { data: url } = supabase.storage.from('memes').getPublicUrl(upload.path);
+
+        const { data: u } = await supabase.auth.getUser();
+        const { error: dbErr } = await supabase.from('memes').insert({
+          author_id: u.user.id,
+          template_key: tSelect.value,
+          top_text: topIn.value,
+          bottom_text: botIn.value,
+          image_url: url.publicUrl
+        });
+        if (dbErr) throw dbErr;
+
+        alert('Published!');
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        publishBtn.disabled = false;
+      }
+    }
+    publishBtn.onclick = publish;
+
+    async function initApp() {
+      // live leaderboard (top 50)
+      const { data, error } = await supabase.from('meme_leaderboard')
+        .select('*').order('like_count', { ascending: false }).limit(50);
+      if (error) return alert(error.message);
+      renderFeed(data);
+    }
+
+    function renderFeed(items) {
+      feed.innerHTML = '';
+      items.forEach(m => {
+        const card = document.createElement('div'); card.className = 'card';
+        card.innerHTML = `
+          <img src="${m.image_url}"/>
+          <div class="likes" style="margin-top:8px">
+            <button data-like="${m.id}">♥ Like/Unlike</button>
+            <strong>${m.like_count}</strong> likes
+          </div>`;
+        feed.appendChild(card);
+      });
+    }
+
+    feed.addEventListener('click', async (e)=>{
+      const btn = e.target.closest('button[data-like]');
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        const memeId = btn.dataset.like;
+        const { data: u } = await supabase.auth.getUser();
+        // try insert like; if constraint, delete to unlike
+        const { error: insErr } = await supabase.from('likes').insert({ meme_id: memeId, user_id: u.user.id });
+        if (insErr) {
+          // assume it exists → unlike
+          await supabase.from('likes').delete().eq('meme_id', memeId).eq('user_id', u.user.id);
+        }
+        // refresh leaderboard
+        const { data } = await supabase.from('meme_leaderboard').select('*').order('like_count', { ascending: false }).limit(50);
+        renderFeed(data);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // On load
+    refreshSession();
+  </script>
+</head>
+<body>
+  <h1>Meme Forge</h1>
+
+  <!-- AUTH -->
+  <div id="authView" class="card">
+    <h3>Sign up / Sign in</h3>
+    <input id="email" placeholder="email" type="email"><br><br>
+    <input id="pass" placeholder="password" type="password"><br><br>
+    <button id="signUp">Sign Up</button>
+    <button id="signIn">Sign In</button>
+  </div>
+
+  <!-- SETUP MEME PASSWORD (once) -->
+  <div id="setupView" class="card hidden">
+    <h3>Set your Meme Password (one-time)</h3>
+    <label>Template:
+      <select id="sTpl">
+        <option value="drake">Drake</option>
+        <option value="distracted">Distracted Boyfriend</option>
+        <option value="doge">Doge</option>
+      </select>
+    </label><br><br>
+    <input id="sTop" placeholder="Top text"><br><br>
+    <input id="sBot" placeholder="Bottom text"><br><br>
+    <button id="sSave">Save Meme Password</button>
+    <button id="signOut" style="float:right">Sign Out</button>
+  </div>
+
+  <!-- VERIFY MEME PASSWORD (every login) -->
+  <div id="verifyView" class="card hidden">
+    <h3>Verify your Meme Password</h3>
+    <label>Template:
+      <select id="vTpl">
+        <option value="drake">Drake</option>
+        <option value="distracted">Distracted Boyfriend</option>
+        <option value="doge">Doge</option>
+      </select>
+    </label><br><br>
+    <input id="vTop" placeholder="Top text"><br><br>
+    <input id="vBot" placeholder="Bottom text"><br><br>
+    <button id="vCheck">Verify & Continue</button>
+    <button id="signOut" style="float:right">Sign Out</button>
+  </div>
+
+  <!-- APP -->
+  <div id="appView" class="hidden">
+    <div class="row">
+      <div class="card">
+        <h3>Create Meme</h3>
+        <label>Template:
+          <select id="template">
+            <option value="drake">Drake</option>
+            <option value="distracted">Distracted Boyfriend</option>
+            <option value="doge">Doge</option>
+          </select>
+        </label><br><br>
+        <input id="top" placeholder="Top text" /><br><br>
+        <input id="bottom" placeholder="Bottom text" /><br><br>
+        <canvas id="c"></canvas><br>
+        <button id="publish">Publish</button>
+      </div>
+      <div>
+        <div class="card"><h3>🏆 Leaderboard</h3><div id="feed"></div></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
