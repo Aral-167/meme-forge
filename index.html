@@ -13,6 +13,7 @@
     button { cursor:pointer }
     .hidden{ display:none }
     .likes { display:flex; align-items:center; gap:8px }
+  .toolbar { display:flex; justify-content:flex-end; margin-bottom:12px }
   </style>
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -37,11 +38,20 @@
 
     // Meme password verify each login
     const vTpl = $('#vTpl'), vTop = $('#vTop'), vBot = $('#vBot'), vCheck = $('#vCheck');
+  // Previews for setup/verify
+  const sPrev = document.getElementById('sPrev');
+  const vPrev = document.getElementById('vPrev');
 
     // Editor
     const tSelect = $('#template'); const topIn = $('#top'); const botIn = $('#bottom');
     const canvas = $('#c'); const ctx = canvas.getContext('2d');
-    const publishBtn = $('#publish'); const feed = $('#feed');
+  const publishBtn = $('#publish'); const feed = $('#feed');
+  const resetPosBtn = document.getElementById('resetPos');
+  const midIn = document.getElementById('middle');
+  const midWrap = document.getElementById('middleWrap');
+  const extras = document.getElementById('extras');
+  const addTextBtn = document.getElementById('addText');
+  const copyLayoutBtn = document.getElementById('copyLayout');
 
     // Templates (add your files in /templates)
     const templates = {
@@ -49,6 +59,63 @@
       distracted: 'templates/distracted.jpg',
       doge: 'templates/doge.jpg'
     };
+      // Layout configuration (locked positions) per template
+      const templateLayouts = {
+        drake: { top:{x:0.73,y:0.18}, bottom:{x:0.73,y:0.72} },
+  distracted: { top:{x:0.22,y:0.55}, mid:{x:0.58,y:0.45}, bottom:{x:0.80,y:0.82} },
+        doge: { top:{x:0.48,y:0.02}, bottom:{x:0.49,y:0.80} }
+      };
+      const LOCK_TEMPLATE_SLOTS = true; // Option B selected
+
+    // ---------- Small preview helpers (for setup/verify) ----------
+    function bindPreview(tplSel, topEl, botEl, canvasEl) {
+      if (!tplSel || !topEl || !botEl || !canvasEl) return;
+      let img = new Image();
+      function drawPreview() {
+        if (!img.complete) return;
+        const srcW = img.width || 600, srcH = img.height || 600;
+        const maxW = 420;
+        const w = Math.min(maxW, srcW);
+        const scale = w / srcW;
+        const h = Math.round(srcH * scale);
+        canvasEl.width = w; canvasEl.height = h;
+        const ctx2 = canvasEl.getContext('2d');
+        ctx2.clearRect(0,0,w,h);
+        ctx2.drawImage(img, 0, 0, w, h);
+        ctx2.font = `${Math.floor(w/12)}px Impact, Arial Black, sans-serif`;
+        ctx2.fillStyle = 'white'; ctx2.textAlign='center';
+        ctx2.lineWidth = Math.ceil(w/200); ctx2.strokeStyle='black';
+        const lineH = parseInt(ctx2.font,10) + 6;
+        const pad = Math.floor(h*0.06);
+        const drawLines = (text, y) => {
+          const t = (text||'').trim().toUpperCase(); if (!t) return;
+          const words = t.split(/\s+/);
+          let line = '', lines = [];
+          for (const w2 of words) {
+            const test = line ? line + ' ' + w2 : w2;
+            if (ctx2.measureText(test).width > w*0.9) { if (line) lines.push(line); line = w2; }
+            else line = test;
+          }
+          if (line) lines.push(line);
+          lines.forEach((ln,i)=>{
+            const yy = y + i*lineH + parseInt(ctx2.font,10);
+            ctx2.strokeText(ln, w/2, yy);
+            ctx2.fillText(ln, w/2, yy);
+          });
+        };
+        drawLines(topEl.value, pad);
+        drawLines(botEl.value, h - pad - lineH);
+      }
+      function loadImage() {
+        img = new Image();
+        img.onload = drawPreview;
+        img.src = templates[tplSel.value];
+      }
+      tplSel.addEventListener('change', loadImage);
+      topEl.addEventListener('input', drawPreview);
+      botEl.addEventListener('input', drawPreview);
+      loadImage();
+    }
 
     // ---------- UI state ----------
     async function refreshSession() {
@@ -68,6 +135,9 @@
     function show(view) {
       [authView, setupView, verifyView, appView].forEach(v => v.classList.add('hidden'));
       view.classList.remove('hidden');
+      // toggle Sign Out visibility (only when logged in views are shown)
+      if (view === authView) signOutBtn.classList.add('hidden');
+      else signOutBtn.classList.remove('hidden');
     }
 
     // ---------- Auth ----------
@@ -109,7 +179,19 @@
     };
 
     // ---------- Meme editor ----------
-    let img = new Image();
+  let img = new Image();
+  // active slot positions (copied from templateLayouts on template change)
+  let posTop = { x: 0.5, y: 0.08 };
+  let posMid = { x: 0.5, y: 0.50 };
+  let posBot = { x: 0.5, y: 0.88 };
+  // last computed bounding boxes for hit-testing
+  let topBox = null, midBox = null, botBox = null;
+  // additional custom texts
+  let extraTexts = []; // {id:number, text:string, pos:{x,y}, box?:{x,y,w,h}}
+  // dragging state
+  const drag = { which: null, dx: 0, dy: 0 };
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
     function draw() {
       if (!img.complete) return;
       const w = img.width, h = img.height;
@@ -118,31 +200,195 @@
       ctx.font = `${Math.floor(w/10)}px Impact, Arial Black, sans-serif`;
       ctx.fillStyle = 'white'; ctx.textAlign='center';
       ctx.lineWidth = Math.ceil(w/200); ctx.strokeStyle='black';
+      const lineH = parseInt(ctx.font,10) + 6;
+      const fontSize = parseInt(ctx.font,10);
 
-      const pad = Math.floor(h*0.06);
-      const drawLines = (text, y) => {
-        const words = text.toUpperCase().split(/\s+/);
+      const drawBlock = (text, cx, topY) => {
+        const t = (text || '').trim().toUpperCase();
+        if (!t) return null;
+        const words = t.split(/\s+/);
         let line = '', lines = [];
         for (const w2 of words) {
           const test = line ? line + ' ' + w2 : w2;
-          if (ctx.measureText(test).width > w*0.9) { lines.push(line); line = w2; }
+          if (ctx.measureText(test).width > w*0.9) { if (line) lines.push(line); line = w2; }
           else line = test;
         }
-        lines.push(line);
+        if (line) lines.push(line);
+        let maxW = 0;
+        for (const ln of lines) maxW = Math.max(maxW, ctx.measureText(ln).width);
+        // draw lines
         lines.forEach((ln,i)=>{
-          const yy = y + i*(parseInt(ctx.font,10)+6);
-          ctx.strokeText(ln, w/2, yy);
-          ctx.fillText(ln, w/2, yy);
+          const yy = topY + fontSize + i*lineH; // baseline position per line
+          ctx.strokeText(ln, cx, yy);
+          ctx.fillText(ln, cx, yy);
         });
+        return { x: cx - maxW/2, y: topY, w: maxW, h: lines.length * lineH };
       };
-      drawLines(topIn.value, pad);
-      drawLines(botIn.value, h - pad - parseInt(ctx.font,10));
+
+      topBox = drawBlock(topIn.value, posTop.x * w, posTop.y * h);
+      midBox = (midWrap && !midWrap.classList.contains('hidden') && midIn) ? drawBlock(midIn.value, posMid.x * w, posMid.y * h) : null;
+      botBox = drawBlock(botIn.value, posBot.x * w, posBot.y * h);
+  // draw extra texts and store boxes
+  extraTexts.forEach(t => { t.box = drawBlock(t.text, t.pos.x * w, t.pos.y * h); });
     }
     function loadTemplate(key) { img = new Image(); img.onload = draw; img.src = templates[key]; }
 
-    tSelect.onchange = () => loadTemplate(tSelect.value);
-    topIn.oninput = draw; botIn.oninput = draw;
+    function setDefaultPositionsForTemplate(key){
+      const layout = templateLayouts[key];
+      if (!layout) return;
+      if (layout.top) posTop = { ...layout.top };
+      if (layout.mid) posMid = { ...layout.mid };
+      if (layout.bottom) posBot = { ...layout.bottom };
+    }
+    function toggleMiddleForTemplate(key){
+      if (!midWrap) return;
+      if (key === 'distracted') midWrap.classList.remove('hidden'); else midWrap.classList.add('hidden');
+    }
+    tSelect.onchange = () => { setDefaultPositionsForTemplate(tSelect.value); toggleMiddleForTemplate(tSelect.value); loadTemplate(tSelect.value); };
+    topIn.oninput = draw; botIn.oninput = draw; if (midIn) midIn.oninput = draw;
+    toggleMiddleForTemplate(tSelect.value);
+    setDefaultPositionsForTemplate(tSelect.value);
     loadTemplate(tSelect.value);
+
+    // ----- Dragging for positioning -----
+    function toCanvasXY(e) {
+      const r = canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) * (canvas.width / r.width);
+      const y = (e.clientY - r.top) * (canvas.height / r.height);
+      return { x, y };
+    }
+    function inBox(pt, box) {
+      if (!box) return false;
+      return pt.x >= box.x && pt.x <= box.x + box.w && pt.y >= box.y && pt.y <= box.y + box.h;
+    }
+    function updateCursor(e){
+      const pt = toCanvasXY(e);
+  if (!LOCK_TEMPLATE_SLOTS && (inBox(pt, topBox) || inBox(pt, botBox) || inBox(pt, midBox)) || (extraTexts && extraTexts.some(t=>inBox(pt, t.box)))) canvas.style.cursor = 'move';
+      else canvas.style.cursor = '';
+    }
+    canvas.addEventListener('mousemove', (e)=>{
+      if (!drag.which) { updateCursor(e); return; }
+      const { x, y } = toCanvasXY(e);
+      const w = canvas.width, h = canvas.height;
+  if (drag.which === 'top') {
+        posTop.x = clamp((x - drag.dx)/w, 0, 1);
+        posTop.y = clamp((y - drag.dy)/h, 0, 1);
+      } else if (drag.which === 'mid') {
+        posMid.x = clamp((x - drag.dx)/w, 0, 1);
+        posMid.y = clamp((y - drag.dy)/h, 0, 1);
+      } else if (drag.which === 'bot') {
+        posBot.x = clamp((x - drag.dx)/w, 0, 1);
+        posBot.y = clamp((y - drag.dy)/h, 0, 1);
+      } else if (drag.which && String(drag.which).startsWith('extra-')) {
+        const id = Number(String(drag.which).split('-')[1]);
+        const t = extraTexts.find(et=>et.id===id);
+        if (t) {
+          t.pos.x = clamp((x - drag.dx)/w, 0, 1);
+          t.pos.y = clamp((y - drag.dy)/h, 0, 1);
+        }
+      }
+      draw();
+    });
+    canvas.addEventListener('mousedown', (e)=>{
+      const { x, y } = toCanvasXY(e);
+      const w = canvas.width, h = canvas.height;
+  if (!LOCK_TEMPLATE_SLOTS && inBox({x,y}, topBox)) {
+        drag.which = 'top';
+        drag.dx = x - posTop.x * w; drag.dy = y - posTop.y * h;
+  } else if (!LOCK_TEMPLATE_SLOTS && inBox({x,y}, midBox)) {
+        drag.which = 'mid';
+        drag.dx = x - posMid.x * w; drag.dy = y - posMid.y * h;
+  } else if (!LOCK_TEMPLATE_SLOTS && inBox({x,y}, botBox)) {
+        drag.which = 'bot';
+        drag.dx = x - posBot.x * w; drag.dy = y - posBot.y * h;
+      } else {
+        // check extras
+        let picked = null;
+        for (const t of extraTexts) {
+          if (inBox({x,y}, t.box)) { picked = t; break; }
+        }
+        if (picked) {
+          drag.which = `extra-${picked.id}`;
+          drag.dx = x - picked.pos.x * w; drag.dy = y - picked.pos.y * h;
+        } else {
+          drag.which = null;
+        }
+      }
+    });
+    ['mouseup','mouseleave'].forEach(ev => canvas.addEventListener(ev, ()=>{ drag.which = null; }));
+
+    // Reset positions
+    if (resetPosBtn) {
+      if (LOCK_TEMPLATE_SLOTS) resetPosBtn.classList.add('hidden');
+      else resetPosBtn.onclick = () => { setDefaultPositionsForTemplate(tSelect.value); draw(); };
+    }
+
+    // ---------- Layout debug / exposure ----------
+    // Expose getters & setters so you can inspect via DevTools
+    window.memeLayoutAPI = {
+      get() { return { template: tSelect.value, top: { ...posTop }, mid: { ...posMid }, bottom: { ...posBot } }; },
+      set(p) {
+        if (p.top) posTop = { ...posTop, ...p.top };
+        if (p.mid) posMid = { ...posMid, ...p.mid };
+        if (p.bottom) posBot = { ...posBot, ...p.bottom };
+        draw();
+      },
+      log() { console.log('[memeLayout]', this.get()); }
+    };
+    if (copyLayoutBtn) {
+      copyLayoutBtn.onclick = async () => {
+        const data = window.memeLayoutAPI.get();
+        const text = JSON.stringify({ [tSelect.value]: { top: data.top, mid: data.mid, bottom: data.bottom } }, null, 2);
+        try { await navigator.clipboard.writeText(text); alert('Layout JSON copied to clipboard'); }
+        catch { console.log(text); alert('Copied layout logged to console (clipboard unavailable).'); }
+      };
+    }
+    // Hotkey Alt+L to log current layout
+    window.addEventListener('keydown', (e)=>{ if (e.altKey && e.key.toLowerCase()==='l') window.memeLayoutAPI.log(); });
+
+    // ---------- Extra texts UI ----------
+    function renderExtrasUI() {
+      if (!extras) return;
+      extras.innerHTML = '';
+      extraTexts.forEach(t => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '6px';
+        row.style.alignItems = 'center';
+        row.style.margin = '4px 0';
+        row.dataset.extraId = String(t.id);
+        row.innerHTML = `
+          <input data-extra-input="${t.id}" placeholder="Text" value="${t.text}">
+          <button data-extra-del="${t.id}">Remove</button>
+        `;
+        extras.appendChild(row);
+      });
+    }
+    if (addTextBtn) {
+      addTextBtn.onclick = () => {
+        const id = Date.now() + Math.floor(Math.random()*1000);
+        extraTexts.push({ id, text: 'New text', pos: { x: 0.5, y: 0.5 } });
+        renderExtrasUI();
+        draw();
+      };
+    }
+    if (extras) {
+      extras.addEventListener('input', (e) => {
+        const inp = e.target.closest('input[data-extra-input]');
+        if (!inp) return;
+        const id = Number(inp.dataset.extraInput);
+        const t = extraTexts.find(x=>x.id===id);
+        if (t) { t.text = inp.value; draw(); }
+      });
+      extras.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-extra-del]');
+        if (!btn) return;
+        const id = Number(btn.dataset.extraDel);
+        extraTexts = extraTexts.filter(x=>x.id!==id);
+        renderExtrasUI();
+        draw();
+      });
+    }
 
     // ---------- Publish & Feed ----------
     async function publish() {
@@ -219,11 +465,17 @@
     });
 
     // On load
-    refreshSession();
+  // bind previews and then refresh session
+  bindPreview(sTpl, sTop, sBot, sPrev);
+  bindPreview(vTpl, vTop, vBot, vPrev);
+  refreshSession();
   </script>
 </head>
 <body>
   <h1>Meme Forge</h1>
+  <div class="toolbar">
+    <button id="signOut" class="hidden">Sign Out</button>
+  </div>
 
   <!-- AUTH -->
   <div id="authView" class="card">
@@ -246,8 +498,8 @@
     </label><br><br>
     <input id="sTop" placeholder="Top text"><br><br>
     <input id="sBot" placeholder="Bottom text"><br><br>
+  <canvas id="sPrev" title="Preview"></canvas><br>
     <button id="sSave">Save Meme Password</button>
-    <button id="signOut" style="float:right">Sign Out</button>
   </div>
 
   <!-- VERIFY MEME PASSWORD (every login) -->
@@ -262,8 +514,8 @@
     </label><br><br>
     <input id="vTop" placeholder="Top text"><br><br>
     <input id="vBot" placeholder="Bottom text"><br><br>
+  <canvas id="vPrev" title="Preview"></canvas><br>
     <button id="vCheck">Verify & Continue</button>
-    <button id="signOut" style="float:right">Sign Out</button>
   </div>
 
   <!-- APP -->
@@ -277,11 +529,27 @@
             <option value="distracted">Distracted Boyfriend</option>
             <option value="doge">Doge</option>
           </select>
-        </label><br><br>
+  </label>
+  <button id="copyLayout" style="margin-left:8px">Copy layout coords</button><br><br>
         <input id="top" placeholder="Top text" /><br><br>
+        <div id="middleWrap" class="hidden">
+          <input id="middle" placeholder="Middle text (distracted only)" />
+          <br><br>
+        </div>
         <input id="bottom" placeholder="Bottom text" /><br><br>
-        <canvas id="c"></canvas><br>
-        <button id="publish">Publish</button>
+        <canvas id="c" title="Tip: Drag the text to move it"></canvas><br>
+        <div style="display:flex; gap:8px; align-items:center; margin:6px 0 10px">
+          <button id="resetPos">Reset positions</button>
+          <span style="color:#666; font-size:12px">Tip: drag the text on the image to move it</span>
+        </div>
+        <div class="card" style="background:#fafafa">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <h4 style="margin:6px 0">Extra texts</h4>
+            <button id="addText">Add text</button>
+          </div>
+          <div id="extras"></div>
+        </div>
+  <button id="publish" style="margin-top:16px">Publish</button>
       </div>
       <div>
         <div class="card"><h3>🏆 Leaderboard</h3><div id="feed"></div></div>
