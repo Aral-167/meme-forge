@@ -29,10 +29,27 @@
     const setupView = $('#setupView');
     const verifyView = $('#verifyView');
     const appView = $('#appView');
+    const resetView = $('#resetView');
 
     // Auth
     const emailIn = $('#email'); const passIn = $('#pass');
     const signUpBtn = $('#signUp'); const signInBtn = $('#signIn'); const signOutBtn = $('#signOut');
+    const forgotBtn = $('#forgotPassword');
+    
+    // Password reset
+    const resetEmailIn = $('#resetEmail');
+    const sendResetBtn = $('#sendReset');
+    const backToAuthBtn = $('#backToAuth');
+    const resetTpl = $('#resetTpl');
+    const resetTop = $('#resetTop');
+    const resetBot = $('#resetBot');
+    const resetMid = $('#resetMid');
+    const resetMidWrap = $('#resetMidWrap');
+    const resetPrev = $('#resetPrev');
+    const verifyMemeBtn = $('#verifyMeme');
+    const newPassIn = $('#newPassword');
+    const confirmPassIn = $('#confirmPassword');
+    const updatePassBtn = $('#updatePassword');
 
   // Meme password setup
   const sTpl = $('#sTpl'), sTop = $('#sTop'), sBot = $('#sBot'), sSave = $('#sSave');
@@ -132,6 +149,18 @@
     // ---------- UI state ----------
     async function refreshSession() {
       const { data: { session } } = await supabase.auth.getSession();
+      
+      // Check if this is a password reset flow
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('type') === 'recovery') {
+        show(resetView);
+        // Show meme verification form first, not password form
+        document.getElementById('resetEmailForm').style.display = 'none';
+        document.getElementById('resetMemeForm').style.display = 'block';
+        document.getElementById('resetPasswordForm').style.display = 'none';
+        return;
+      }
+      
       if (!session) return show(authView);
   // cache current user id
   const { data: uInfo } = await supabase.auth.getUser();
@@ -148,10 +177,10 @@
     }
 
     function show(view) {
-      [authView, setupView, verifyView, appView].forEach(v => v.classList.add('hidden'));
+      [authView, setupView, verifyView, appView, resetView].forEach(v => v.classList.add('hidden'));
       view.classList.remove('hidden');
       // toggle Sign Out visibility (only when logged in views are shown)
-      if (view === authView) signOutBtn.classList.add('hidden');
+      if (view === authView || view === resetView) signOutBtn.classList.add('hidden');
       else signOutBtn.classList.remove('hidden');
     }
 
@@ -168,6 +197,65 @@
     };
     signOutBtn.onclick = async () => {
       await supabase.auth.signOut();
+      show(authView);
+    };
+
+    // ---------- Password Reset ----------
+    forgotBtn.onclick = async () => {
+      show(resetView);
+    };
+
+    backToAuthBtn.onclick = () => {
+      show(authView);
+    };
+
+    sendResetBtn.onclick = async () => {
+      if (!resetEmailIn.value) {
+        alert('Please enter your email address.');
+        return;
+      }
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmailIn.value, {
+        redirectTo: window.location.origin + window.location.pathname + '?type=recovery'
+      });
+      if (error) return alert(error.message);
+      alert('Password reset email sent! Check your inbox and click the link.');
+    };
+
+    verifyMemeBtn.onclick = async () => {
+      const argsBase = { template_key: resetTpl.value, top_text: resetTop.value, bottom_text: resetBot.value };
+      const args = (resetTpl.value === 'distracted' && resetMid) ? { ...argsBase, mid_text: resetMid.value } : argsBase;
+      let { data, error } = await supabase.rpc('verify_meme_secret', args);
+      if (error && args.mid_text) { // fallback
+        ({ data, error } = await supabase.rpc('verify_meme_secret', argsBase));
+      }
+      if (error) return alert(error.message);
+      if (!data) return alert('Meme password is wrong. Cannot proceed with password reset.');
+      
+      // Meme verified, show password form
+      document.getElementById('resetMemeForm').style.display = 'none';
+      document.getElementById('resetPasswordForm').style.display = 'block';
+    };
+
+    updatePassBtn.onclick = async () => {
+      if (!newPassIn.value || !confirmPassIn.value) {
+        alert('Please fill in both password fields.');
+        return;
+      }
+      if (newPassIn.value !== confirmPassIn.value) {
+        alert('Passwords do not match.');
+        return;
+      }
+      if (newPassIn.value.length < 6) {
+        alert('Password must be at least 6 characters long.');
+        return;
+      }
+      
+      const { error } = await supabase.auth.updateUser({ password: newPassIn.value });
+      if (error) return alert(error.message);
+      
+      alert('Password updated successfully! You can now sign in with your new password.');
+      // Clear the URL parameters and go to auth
+      window.history.replaceState({}, document.title, window.location.pathname);
       show(authView);
     };
 
@@ -468,10 +556,12 @@
   // bind previews and then refresh session
   bindPreview(sTpl, sTop, sBot, sPrev, sMid);
   bindPreview(vTpl, vTop, vBot, vPrev, vMid);
+  bindPreview(resetTpl, resetTop, resetBot, resetPrev, resetMid);
   function togglePasswordMid(sel, wrap){ if(!sel||!wrap) return; if(sel.value==='distracted') wrap.classList.remove('hidden'); else wrap.classList.add('hidden'); }
   sTpl.addEventListener('change', ()=> togglePasswordMid(sTpl, sMidWrap));
   vTpl.addEventListener('change', ()=> togglePasswordMid(vTpl, vMidWrap));
-  togglePasswordMid(sTpl, sMidWrap); togglePasswordMid(vTpl, vMidWrap);
+  resetTpl.addEventListener('change', ()=> togglePasswordMid(resetTpl, resetMidWrap));
+  togglePasswordMid(sTpl, sMidWrap); togglePasswordMid(vTpl, vMidWrap); togglePasswordMid(resetTpl, resetMidWrap);
   refreshSession();
   </script>
 </head>
@@ -488,6 +578,42 @@
     <input id="pass" placeholder="password" type="password"><br><br>
     <button id="signUp">Sign Up</button>
     <button id="signIn">Sign In</button>
+    <button id="forgotPassword" style="background:#f0f0f0;color:#666;margin-left:8px">Forgot Password?</button>
+  </div>
+
+  <!-- PASSWORD RESET -->
+  <div id="resetView" class="card hidden">
+    <h3>Reset Password</h3>
+    <div id="resetEmailForm">
+      <p>Enter your email address to receive a password reset link:</p>
+      <input id="resetEmail" placeholder="Enter your email" type="email"><br><br>
+      <button id="sendReset">Send Reset Link</button>
+      <button id="backToAuth" style="background:#f0f0f0;color:#666;margin-left:8px">Back to Sign In</button>
+    </div>
+    <div id="resetMemeForm" style="display:none">
+      <p>First, verify your meme password to confirm your identity:</p>
+      <label>Template:
+        <select id="resetTpl">
+          <option value="drake">Drake</option>
+          <option value="distracted">Distracted Boyfriend</option>
+          <option value="doge">Doge</option>
+        </select>
+      </label><br><br>
+      <input id="resetTop" placeholder="Top text"><br><br>
+      <div id="resetMidWrap" class="hidden">
+        <input id="resetMid" placeholder="Middle text (distracted only)">
+        <br><br>
+      </div>
+      <input id="resetBot" placeholder="Bottom text"><br><br>
+      <canvas id="resetPrev" title="Preview"></canvas><br>
+      <button id="verifyMeme">Verify Meme Password</button>
+    </div>
+    <div id="resetPasswordForm" style="display:none">
+      <p>Meme password verified! Now enter your new account password:</p>
+      <input id="newPassword" placeholder="New password" type="password"><br><br>
+      <input id="confirmPassword" placeholder="Confirm new password" type="password"><br><br>
+      <button id="updatePassword">Update Password</button>
+    </div>
   </div>
 
   <!-- SETUP MEME PASSWORD (once) -->
