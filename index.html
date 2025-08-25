@@ -379,13 +379,15 @@
       feed.innerHTML = '';
       items.forEach(m => {
         const card = document.createElement('div'); card.className = 'card';
-        const canDelete = currentUserId && m.author_id === currentUserId;
+        // Support either m.id (memes table) or m.meme_id (leaderboard view alias)
+        const rowId = (m.id !== undefined && m.id !== null) ? m.id : (m.meme_id !== undefined ? m.meme_id : null);
+        const canDelete = currentUserId && m.author_id === currentUserId && rowId !== null;
         card.innerHTML = `
           <img src="${m.image_url}"/>
           <div class="likes" style="margin-top:8px; gap:12px; flex-wrap:wrap">
-            <button data-like="${m.id}">♥ Like/Unlike</button>
-            <strong>${m.like_count}</strong> likes
-            ${canDelete ? `<button data-del="${m.id}" style="background:#fbeaea;color:#a00">Delete</button>` : ''}
+            <button data-like="${rowId}">♥ Like/Unlike</button>
+            <strong>${m.like_count ?? 0}</strong> likes
+            ${canDelete ? `<button data-del="${rowId}" style="background:#fbeaea;color:#a00">Delete</button>` : ''}
           </div>`;
         feed.appendChild(card);
       });
@@ -407,34 +409,52 @@
           }
         } else if (delBtn) {
           const memeId = delBtn.dataset.del;
+          if (!memeId) { alert('Cannot determine meme id for deletion.'); return; }
           if (!confirm('Delete this meme? This cannot be undone.')) return;
-          // Ensure we have user id
-          if (!currentUserId) { const { data: u } = await supabase.auth.getUser(); currentUserId = u?.user?.id || null; }
-          // Optimistically remove card from UI
-          const card = delBtn.closest('.card');
-          if (card) card.remove();
-          // Attempt to delete row (RLS must allow author match)
-          const { error: delErr } = await supabase.from('memes').delete().eq('id', memeId).eq('author_id', currentUserId);
-          if (delErr) {
-            alert('Delete failed: ' + delErr.message);
-          } else {
-            // Try to remove file from storage if we can guess path (image tag still accessible?)
-            // We don't store path separately; parse from public URL if standard pattern
-            try {
-              const imgEl = card?.querySelector('img');
-              if (imgEl && imgEl.src.includes('/storage/v1/object/public/')) {
-                const parts = imgEl.src.split('/storage/v1/object/public/')[1];
-                // parts like "memes/memes/123.png" or "memes/123.png" depending on folder usage
-                const pathStart = parts.indexOf('memes/');
-                if (pathStart !== -1) {
-                  const filePath = parts.slice(pathStart + 'memes/'.length);
-                  if (filePath && !filePath.endsWith('/')) {
-                    // Attempt remove (ignore errors)
-                    await supabase.storage.from('memes').remove([filePath]);
-                  }
-                }
-              }
-            } catch(_){}
+          
+          // Try RPC function first (bypasses RLS issues)
+          try {
+            const { data: rpcResult, error: rpcErr } = await supabase.rpc('delete_user_meme', { meme_id: memeId });
+            if (!rpcErr && rpcResult) {
+              console.log('Delete via RPC succeeded');
+              // Remove card from UI
+              const card = delBtn.closest('.card');
+              if (card) card.remove();
+              alert('Meme deleted successfully!');
+            } else {
+              throw new Error(rpcErr?.message || 'RPC delete failed');
+            }
+          } catch (rpcError) {
+            console.warn('RPC delete failed, trying direct delete:', rpcError);
+            
+            // Fallback to direct delete with extensive debugging
+            if (!currentUserId) { 
+              const { data: u } = await supabase.auth.getUser(); 
+              currentUserId = u?.user?.id || null; 
+            }
+            
+            console.log('Direct delete attempt for memeId:', memeId, 'currentUserId:', currentUserId);
+            
+            // Try direct delete without RLS complications
+            const { data: deletedRows, error: delErr } = await supabase
+              .from('memes')
+              .delete()
+              .eq('id', memeId)
+              .eq('author_id', currentUserId)
+              .select('id');
+              
+            console.log('Direct delete result:', { deletedRows, delErr });
+            
+            if (delErr) {
+              alert('Delete failed: ' + delErr.message);
+            } else if (!deletedRows || deletedRows.length === 0) {
+              alert('Delete failed: No rows affected. Check if you own this meme or if RLS policies are blocking deletion.');
+            } else {
+              console.log('Direct delete succeeded');
+              const card = delBtn.closest('.card');
+              if (card) card.remove();
+              alert('Meme deleted successfully!');
+            }
           }
         }
         const { data } = await supabase.from('meme_leaderboard').select('*').order('like_count', { ascending: false }).limit(50);
