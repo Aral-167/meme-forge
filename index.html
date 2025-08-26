@@ -124,7 +124,166 @@
     const SUPABASE_URL = 'https://ycmozdaoyqarwwpxudxa.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbW96ZGFveXFhcnd3cHh1ZHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3MTkyNTgsImV4cCI6MjA3MTI5NTI1OH0.nFCCRHbEWibEfS5fdV77s0iyaxr8TsG0q-LRdK0zhAg';
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  let currentUserId = null;
+
+    // Custom Auth System
+    class CustomAuth {
+      constructor() {
+        this.currentUser = null;
+        this.sessionKey = 'meme_forge_session';
+        this.loadSession();
+      }
+
+      // Generate a simple hash (in production, use proper bcrypt)
+      async hashPassword(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password + 'meme_forge_salt');
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      generateUserId() {
+        return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      }
+
+      generateSessionToken() {
+        return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 16);
+      }
+
+      saveSession(user, token) {
+        const session = { user, token, expires: Date.now() + (7 * 24 * 60 * 60 * 1000) }; // 7 days
+        localStorage.setItem(this.sessionKey, JSON.stringify(session));
+        this.currentUser = user;
+      }
+
+      loadSession() {
+        try {
+          const stored = localStorage.getItem(this.sessionKey);
+          if (!stored) return false;
+          const session = JSON.parse(stored);
+          if (session.expires < Date.now()) {
+            this.clearSession();
+            return false;
+          }
+          this.currentUser = session.user;
+          return true;
+        } catch {
+          this.clearSession();
+          return false;
+        }
+      }
+
+      clearSession() {
+        localStorage.removeItem(this.sessionKey);
+        this.currentUser = null;
+      }
+
+      isAuthenticated() {
+        return this.currentUser !== null;
+      }
+
+      getCurrentUser() {
+        return this.currentUser;
+      }
+
+      async signUp(email, password) {
+        try {
+          const hashedPassword = await this.hashPassword(password);
+          const userId = this.generateUserId();
+          
+          // Check if user already exists
+          const { data: existing } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email.toLowerCase())
+            .single();
+          
+          if (existing) {
+            throw new Error('User already exists with this email');
+          }
+
+          // Create user record
+          const { data, error } = await supabase
+            .from('users')
+            .insert({
+              id: userId,
+              email: email.toLowerCase(),
+              password_hash: hashedPassword,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          // Create profile record
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: userId,
+              email: email.toLowerCase()
+            });
+
+          if (profileError) {
+            console.warn('Profile creation failed:', profileError.message);
+            // Don't fail the signup if profile creation fails
+          }
+
+          return { success: true, user: data };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+
+      async signIn(email, password) {
+        try {
+          const hashedPassword = await this.hashPassword(password);
+          
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email.toLowerCase())
+            .eq('password_hash', hashedPassword)
+            .single();
+
+          if (error || !data) {
+            throw new Error('Invalid email or password');
+          }
+
+          const sessionToken = this.generateSessionToken();
+          const user = { id: data.id, email: data.email };
+          
+          this.saveSession(user, sessionToken);
+          return { success: true, user };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+
+      signOut() {
+        this.clearSession();
+        return { success: true };
+      }
+
+      async resetPassword(email, newPassword) {
+        try {
+          const hashedPassword = await this.hashPassword(newPassword);
+          
+          const { error } = await supabase
+            .from('users')
+            .update({ password_hash: hashedPassword })
+            .eq('email', email.toLowerCase());
+
+          if (error) throw error;
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+    }
+
+    const auth = new CustomAuth();
+    let currentUserId = auth.getCurrentUser()?.id || null;
 
     // ---------- Elements ----------
     const $ = (q) => document.querySelector(q);
@@ -251,8 +410,6 @@
 
     // ---------- UI state ----------
     async function refreshSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      
       // Check if this is a password reset flow
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('type') === 'recovery') {
@@ -264,13 +421,12 @@
         return;
       }
       
-      if (!session) return show(authView);
-  // cache current user id
-  const { data: uInfo } = await supabase.auth.getUser();
-  currentUserId = uInfo?.user?.id || null;
+      if (!auth.isAuthenticated()) return show(authView);
+      // cache current user id
+      currentUserId = auth.getCurrentUser().id;
 
       // does user have meme secret saved?
-      const { data: prof } = await supabase.from('profiles').select('meme_template_key').single();
+      const { data: prof } = await supabase.from('profiles').select('meme_template_key').eq('user_id', currentUserId).single();
       if (!prof || !prof.meme_template_key) {
         show(setupView);
         return;
@@ -289,17 +445,20 @@
 
     // ---------- Auth ----------
     signUpBtn.onclick = async () => {
-      const { error } = await supabase.auth.signUp({ email: emailIn.value, password: passIn.value });
-      if (error) return alert(error.message);
-      alert('Account created. Sign in now.');
+      const result = await auth.signUp(emailIn.value, passIn.value);
+      if (result.error) return alert(result.error);
+      currentUserId = result.user.id;
+      show(setupView);
     };
     signInBtn.onclick = async () => {
-      const { error } = await supabase.auth.signInWithPassword({ email: emailIn.value, password: passIn.value });
-      if (error) return alert(error.message);
-      await refreshSession();
+      const result = await auth.signIn(emailIn.value, passIn.value);
+      if (result.error) return alert(result.error);
+      currentUserId = result.user.id;
+      show(verifyView);
     };
     signOutBtn.onclick = async () => {
-      await supabase.auth.signOut();
+      auth.signOut();
+      currentUserId = null;
       show(authView);
     };
 
@@ -317,15 +476,41 @@
         alert('Please enter your email address.');
         return;
       }
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmailIn.value, {
-        redirectTo: window.location.origin + window.location.pathname + '?type=recovery'
-      });
-      if (error) return alert(error.message);
-      alert('Password reset email sent! Check your inbox and click the link.');
+      
+      // Check if user exists
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', resetEmailIn.value.toLowerCase())
+        .single();
+        
+      if (!user) {
+        alert('No account found with this email address.');
+        return;
+      }
+      
+      // Store email for reset process
+      window.resetEmail = resetEmailIn.value.toLowerCase();
+      
+      // Show meme verification form directly (no email link needed)
+      document.getElementById('resetEmailForm').style.display = 'none';
+      document.getElementById('resetMemeForm').style.display = 'block';
+      alert('Please verify your meme password to proceed with password reset.');
     };
 
     verifyMemeBtn.onclick = async () => {
-      const argsBase = { template_key: resetTpl.value, top_text: resetTop.value, bottom_text: resetBot.value };
+      if (!window.resetEmail) {
+        alert('Reset session expired. Please start over.');
+        show(authView);
+        return;
+      }
+      
+      const argsBase = { 
+        template_key: resetTpl.value, 
+        top_text: resetTop.value, 
+        bottom_text: resetBot.value,
+        user_email: window.resetEmail  // Pass email to verify for correct user
+      };
       const args = (resetTpl.value === 'distracted' && resetMid) ? { ...argsBase, mid_text: resetMid.value } : argsBase;
       let { data, error } = await supabase.rpc('verify_meme_secret', args);
       if (error && args.mid_text) { // fallback
@@ -353,18 +538,36 @@
         return;
       }
       
-      const { error } = await supabase.auth.updateUser({ password: newPassIn.value });
-      if (error) return alert(error.message);
+      if (!window.resetEmail) {
+        alert('Reset session expired. Please start over.');
+        show(authView);
+        return;
+      }
+      
+      const result = await auth.resetPassword(window.resetEmail, newPassIn.value);
+      if (!result.success) return alert(result.error);
+      
+      // Clear reset session
+      delete window.resetEmail;
       
       alert('Password updated successfully! You can now sign in with your new password.');
-      // Clear the URL parameters and go to auth
-      window.history.replaceState({}, document.title, window.location.pathname);
       show(authView);
     };
 
     // ---------- Meme password setup (once) ----------
     sSave.onclick = async () => {
-      const argsBase = { template_key: sTpl.value, top_text: sTop.value, bottom_text: sBot.value };
+      if (!currentUserId) {
+        alert('User session expired. Please sign in again.');
+        show(authView);
+        return;
+      }
+      
+      const argsBase = { 
+        template_key: sTpl.value, 
+        top_text: sTop.value, 
+        bottom_text: sBot.value,
+        user_id: currentUserId
+      };
       const args = (sTpl.value === 'distracted' && sMid) ? { ...argsBase, mid_text: sMid.value } : argsBase;
       let { error } = await supabase.rpc('set_meme_secret', args);
       if (error && args.mid_text) { // fallback if RPC not updated yet
@@ -377,7 +580,18 @@
 
     // ---------- Verify meme password (each login) ----------
     vCheck.onclick = async () => {
-      const argsBase = { template_key: vTpl.value, top_text: vTop.value, bottom_text: vBot.value };
+      if (!currentUserId) {
+        alert('User session expired. Please sign in again.');
+        show(authView);
+        return;
+      }
+      
+      const argsBase = { 
+        template_key: vTpl.value, 
+        top_text: vTop.value, 
+        bottom_text: vBot.value,
+        user_id: currentUserId
+      };
       const args = (vTpl.value === 'distracted' && vMid) ? { ...argsBase, mid_text: vMid.value } : argsBase;
       let { data, error } = await supabase.rpc('verify_meme_secret', args);
       if (error && args.mid_text) { // fallback
