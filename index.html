@@ -5,15 +5,118 @@
   <title>Meme Forge</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui; margin: 24px; max-width: 980px }
-    .row { display: grid; gap: 16px; grid-template-columns: 1fr 1fr }
-    .card { border:1px solid #eee; border-radius:12px; padding:12px }
-    canvas, img { max-width:100%; border-radius:12px; border:1px solid #ddd }
-    input, select, button { padding:8px 10px; border-radius:10px; border:1px solid #ddd }
-    button { cursor:pointer }
-    .hidden{ display:none }
-    .likes { display:flex; align-items:center; gap:8px }
-  .toolbar { display:flex; justify-content:flex-end; margin-bottom:12px }
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      margin: 0; padding: 24px; max-width: 1200px; margin: 0 auto;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh; color: #333;
+    }
+    h1 { 
+      text-align: center; color: white; font-size: 2.5em; margin-bottom: 8px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .subtitle {
+      text-align: center; color: rgba(255,255,255,0.9); margin-bottom: 32px;
+      font-size: 1.1em; font-weight: 300;
+    }
+    .row { display: grid; gap: 24px; grid-template-columns: 1fr 1fr }
+    .card { 
+      background: white; border-radius: 16px; padding: 24px; 
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);
+    }
+    .card h3 { margin-top: 0; color: #444; font-size: 1.4em; }
+    canvas, img { 
+      max-width: 100%; border-radius: 12px; 
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      border: 2px solid #f0f0f0;
+    }
+    input, select, button { 
+      padding: 12px 16px; border-radius: 12px; border: 2px solid #e1e5e9;
+      font-size: 14px; transition: all 0.2s ease;
+      width: 100%; margin-bottom: 12px;
+    }
+    input:focus, select:focus {
+      outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+    }
+    button { 
+      cursor: pointer; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.5px; transition: all 0.2s ease;
+    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.3); }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .hidden { display: none }
+    .likes { 
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 12px 0; border-top: 1px solid #f0f0f0; margin-top: 12px;
+    }
+    .likes button {
+      padding: 8px 12px; margin: 0; width: auto; font-size: 13px;
+      text-transform: none; letter-spacing: normal;
+    }
+    .likes strong { color: #667eea; font-size: 16px; }
+    .toolbar { 
+      display: flex; justify-content: flex-end; margin-bottom: 24px;
+    }
+    .toolbar button {
+      background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);
+      backdrop-filter: blur(10px); width: auto; margin: 0;
+    }
+    .toolbar button:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    .secondary-btn {
+      background: #f8f9fa !important; color: #666 !important; 
+      border: 2px solid #e9ecef !important;
+    }
+    .secondary-btn:hover {
+      background: #e9ecef !important; transform: translateY(-1px);
+    }
+    .danger-btn {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%) !important;
+    }
+    .danger-btn:hover {
+      box-shadow: 0 6px 20px rgba(255,107,107,0.3);
+    }
+    label {
+      display: block; margin-bottom: 8px; font-weight: 600; color: #555;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .button-group {
+      display: flex; gap: 12px; flex-wrap: wrap;
+    }
+    .button-group button {
+      flex: 1; min-width: 120px;
+    }
+    .preview-container {
+      text-align: center; margin: 16px 0;
+    }
+    .success-message {
+      background: #d4edda; color: #155724; padding: 12px; border-radius: 8px;
+      border: 1px solid #c3e6cb; margin-bottom: 16px;
+    }
+    .error-message {
+      background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px;
+      border: 1px solid #f5c6cb; margin-bottom: 16px;
+    }
+    .meme-card {
+      transition: transform 0.2s ease; margin-bottom: 16px;
+    }
+    .meme-card:hover {
+      transform: translateY(-4px);
+    }
+    @media (max-width: 768px) {
+      .row { grid-template-columns: 1fr; }
+      h1 { font-size: 2em; }
+      .card { padding: 16px; }
+      .button-group { flex-direction: column; }
+      .button-group button { width: 100%; }
+    }
   </style>
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -463,19 +566,19 @@
       renderFeed(data);
     }
 
-    function renderFeed(items) {
+  function renderFeed(items) {
       feed.innerHTML = '';
       items.forEach(m => {
-        const card = document.createElement('div'); card.className = 'card';
+        const card = document.createElement('div'); 
+        card.className = 'card meme-card';
         // Support either m.id (memes table) or m.meme_id (leaderboard view alias)
         const rowId = (m.id !== undefined && m.id !== null) ? m.id : (m.meme_id !== undefined ? m.meme_id : null);
         const canDelete = currentUserId && m.author_id === currentUserId && rowId !== null;
         card.innerHTML = `
-          <img src="${m.image_url}"/>
-          <div class="likes" style="margin-top:8px; gap:12px; flex-wrap:wrap">
-            <button data-like="${rowId}">♥ Like/Unlike</button>
-            <strong>${m.like_count ?? 0}</strong> likes
-            ${canDelete ? `<button data-del="${rowId}" style="background:#fbeaea;color:#a00">Delete</button>` : ''}
+          <img src="${m.image_url}" alt="Meme"/>
+          <div class="likes">
+            <button data-like="${rowId}">❤️ ${m.like_count ?? 0}</button>
+            ${canDelete ? `<button data-del="${rowId}" class="danger-btn">🗑️ Delete</button>` : ''}
           </div>`;
         feed.appendChild(card);
       });
@@ -566,119 +669,181 @@
   </script>
 </head>
 <body>
-  <h1>Meme Forge</h1>
+  <h1>🎭 Meme Forge</h1>
+  <p class="subtitle">Create, Share & Battle Epic Memes</p>
   <div class="toolbar">
-    <button id="signOut" class="hidden">Sign Out</button>
+    <button id="signOut" class="hidden">👋 Sign Out</button>
   </div>
 
   <!-- AUTH -->
   <div id="authView" class="card">
-    <h3>Sign up / Sign in</h3>
-    <input id="email" placeholder="email" type="email"><br><br>
-    <input id="pass" placeholder="password" type="password"><br><br>
-    <button id="signUp">Sign Up</button>
-    <button id="signIn">Sign In</button>
-    <button id="forgotPassword" style="background:#f0f0f0;color:#666;margin-left:8px">Forgot Password?</button>
+    <h3>🚀 Welcome to Meme Forge</h3>
+    <div class="form-group">
+      <label for="email">Email Address</label>
+      <input id="email" placeholder="Enter your email" type="email">
+    </div>
+    <div class="form-group">
+      <label for="pass">Password</label>
+      <input id="pass" placeholder="Enter your password" type="password">
+    </div>
+    <div class="button-group">
+      <button id="signUp">✨ Sign Up</button>
+      <button id="signIn">🔑 Sign In</button>
+    </div>
+    <button id="forgotPassword" class="secondary-btn">🔄 Forgot Password?</button>
   </div>
 
   <!-- PASSWORD RESET -->
   <div id="resetView" class="card hidden">
-    <h3>Reset Password</h3>
+    <h3>🔄 Reset Password</h3>
     <div id="resetEmailForm">
       <p>Enter your email address to receive a password reset link:</p>
-      <input id="resetEmail" placeholder="Enter your email" type="email"><br><br>
-      <button id="sendReset">Send Reset Link</button>
-      <button id="backToAuth" style="background:#f0f0f0;color:#666;margin-left:8px">Back to Sign In</button>
+      <div class="form-group">
+        <label for="resetEmail">Email Address</label>
+        <input id="resetEmail" placeholder="Enter your email" type="email">
+      </div>
+      <div class="button-group">
+        <button id="sendReset">📧 Send Reset Link</button>
+        <button id="backToAuth" class="secondary-btn">← Back to Sign In</button>
+      </div>
     </div>
     <div id="resetMemeForm" style="display:none">
-      <p>First, verify your meme password to confirm your identity:</p>
-      <label>Template:
+      <p>🛡️ First, verify your meme password to confirm your identity:</p>
+      <div class="form-group">
+        <label for="resetTpl">Template</label>
         <select id="resetTpl">
-          <option value="drake">Drake</option>
-          <option value="distracted">Distracted Boyfriend</option>
-          <option value="doge">Doge</option>
+          <option value="drake">🦆 Drake Pointing</option>
+          <option value="distracted">👀 Distracted Boyfriend</option>
+          <option value="doge">🐕 Doge</option>
         </select>
-      </label><br><br>
-      <input id="resetTop" placeholder="Top text"><br><br>
-      <div id="resetMidWrap" class="hidden">
-        <input id="resetMid" placeholder="Middle text (distracted only)">
-        <br><br>
       </div>
-      <input id="resetBot" placeholder="Bottom text"><br><br>
-      <canvas id="resetPrev" title="Preview"></canvas><br>
-      <button id="verifyMeme">Verify Meme Password</button>
+      <div class="form-group">
+        <label for="resetTop">Top Text</label>
+        <input id="resetTop" placeholder="Enter top text">
+      </div>
+      <div id="resetMidWrap" class="form-group hidden">
+        <label for="resetMid">Middle Text</label>
+        <input id="resetMid" placeholder="Enter middle text (distracted only)">
+      </div>
+      <div class="form-group">
+        <label for="resetBot">Bottom Text</label>
+        <input id="resetBot" placeholder="Enter bottom text">
+      </div>
+      <div class="preview-container">
+        <canvas id="resetPrev" title="Preview"></canvas>
+      </div>
+      <button id="verifyMeme">✅ Verify Meme Password</button>
     </div>
     <div id="resetPasswordForm" style="display:none">
-      <p>Meme password verified! Now enter your new account password:</p>
-      <input id="newPassword" placeholder="New password" type="password"><br><br>
-      <input id="confirmPassword" placeholder="Confirm new password" type="password"><br><br>
-      <button id="updatePassword">Update Password</button>
+      <div class="success-message">✅ Meme password verified! Now enter your new account password:</div>
+      <div class="form-group">
+        <label for="newPassword">New Password</label>
+        <input id="newPassword" placeholder="Enter new password" type="password">
+      </div>
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password</label>
+        <input id="confirmPassword" placeholder="Confirm new password" type="password">
+      </div>
+      <button id="updatePassword">🔐 Update Password</button>
     </div>
   </div>
 
   <!-- SETUP MEME PASSWORD (once) -->
   <div id="setupView" class="card hidden">
-    <h3>Set your Meme Password (one-time)</h3>
-    <label>Template:
+    <h3>🛡️ Set Your Meme Password</h3>
+    <p>Create a unique meme-based password for extra security!</p>
+    <div class="form-group">
+      <label for="sTpl">Choose Template</label>
       <select id="sTpl">
-        <option value="drake">Drake</option>
-        <option value="distracted">Distracted Boyfriend</option>
-        <option value="doge">Doge</option>
+        <option value="drake">🦆 Drake Pointing</option>
+        <option value="distracted">👀 Distracted Boyfriend</option>
+        <option value="doge">🐕 Doge</option>
       </select>
-    </label><br><br>
-    <input id="sTop" placeholder="Top text"><br><br>
-    <div id="sMidWrap" class="hidden">
-      <input id="sMid" placeholder="Middle text (distracted only)">
-      <br><br>
     </div>
-    <input id="sBot" placeholder="Bottom text"><br><br>
-  <canvas id="sPrev" title="Preview"></canvas><br>
-    <button id="sSave">Save Meme Password</button>
+    <div class="form-group">
+      <label for="sTop">Top Text</label>
+      <input id="sTop" placeholder="Enter top text">
+    </div>
+    <div id="sMidWrap" class="form-group hidden">
+      <label for="sMid">Middle Text</label>
+      <input id="sMid" placeholder="Enter middle text (distracted only)">
+    </div>
+    <div class="form-group">
+      <label for="sBot">Bottom Text</label>
+      <input id="sBot" placeholder="Enter bottom text">
+    </div>
+    <div class="preview-container">
+      <canvas id="sPrev" title="Preview"></canvas>
+    </div>
+    <button id="sSave">💾 Save Meme Password</button>
   </div>
 
   <!-- VERIFY MEME PASSWORD (every login) -->
   <div id="verifyView" class="card hidden">
-    <h3>Verify your Meme Password</h3>
-    <label>Template:
+    <h3>🔐 Verify Your Meme Password</h3>
+    <p>Enter your meme password to access the app</p>
+    <div class="form-group">
+      <label for="vTpl">Template</label>
       <select id="vTpl">
-        <option value="drake">Drake</option>
-        <option value="distracted">Distracted Boyfriend</option>
-        <option value="doge">Doge</option>
+        <option value="drake">🦆 Drake Pointing</option>
+        <option value="distracted">👀 Distracted Boyfriend</option>
+        <option value="doge">🐕 Doge</option>
       </select>
-    </label><br><br>
-    <input id="vTop" placeholder="Top text"><br><br>
-    <div id="vMidWrap" class="hidden">
-      <input id="vMid" placeholder="Middle text (distracted only)">
-      <br><br>
     </div>
-    <input id="vBot" placeholder="Bottom text"><br><br>
-  <canvas id="vPrev" title="Preview"></canvas><br>
-    <button id="vCheck">Verify & Continue</button>
+    <div class="form-group">
+      <label for="vTop">Top Text</label>
+      <input id="vTop" placeholder="Enter top text">
+    </div>
+    <div id="vMidWrap" class="form-group hidden">
+      <label for="vMid">Middle Text</label>
+      <input id="vMid" placeholder="Enter middle text (distracted only)">
+    </div>
+    <div class="form-group">
+      <label for="vBot">Bottom Text</label>
+      <input id="vBot" placeholder="Enter bottom text">
+    </div>
+    <div class="preview-container">
+      <canvas id="vPrev" title="Preview"></canvas>
+    </div>
+    <button id="vCheck">✅ Verify & Continue</button>
   </div>
 
   <!-- APP -->
   <div id="appView" class="hidden">
     <div class="row">
       <div class="card">
-        <h3>Create Meme</h3>
-        <label>Template:
+        <h3>🎨 Create Your Meme</h3>
+        <div class="form-group">
+          <label for="template">Choose Template</label>
           <select id="template">
-            <option value="drake">Drake</option>
-            <option value="distracted">Distracted Boyfriend</option>
-            <option value="doge">Doge</option>
-    </select>
-  </label><br><br>
-        <input id="top" placeholder="Top text" /><br><br>
-        <div id="middleWrap" class="hidden">
-          <input id="middle" placeholder="Middle text (distracted only)" />
-          <br><br>
+            <option value="drake">🦆 Drake Pointing</option>
+            <option value="distracted">👀 Distracted Boyfriend</option>
+            <option value="doge">🐕 Doge</option>
+          </select>
         </div>
-        <input id="bottom" placeholder="Bottom text" /><br><br>
-  <canvas id="c"></canvas><br>
-  <button id="publish" style="margin-top:16px">Publish</button>
+        <div class="form-group">
+          <label for="top">Top Text</label>
+          <input id="top" placeholder="Enter top text" />
+        </div>
+        <div id="middleWrap" class="form-group hidden">
+          <label for="middle">Middle Text</label>
+          <input id="middle" placeholder="Enter middle text (distracted only)" />
+        </div>
+        <div class="form-group">
+          <label for="bottom">Bottom Text</label>
+          <input id="bottom" placeholder="Enter bottom text" />
+        </div>
+        <div class="preview-container">
+          <canvas id="c"></canvas>
+        </div>
+        <button id="publish">🚀 Publish Meme</button>
       </div>
       <div>
-        <div class="card"><h3>🏆 Leaderboard</h3><div id="feed"></div></div>
+        <div class="card">
+          <h3>🏆 Meme Leaderboard</h3>
+          <p>Top memes by likes</p>
+          <div id="feed"></div>
+        </div>
       </div>
     </div>
   </div>
