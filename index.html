@@ -744,6 +744,12 @@
     async function publish() {
       publishBtn.disabled = true;
       try {
+        const user = auth.getCurrentUser();
+        if (!user || !user.id) {
+          alert('You must be logged in to publish. Please refresh and sign in.');
+          return;
+        }
+
         const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
         const fileName = `memes/${Date.now()}.png`;
         const { data: upload, error: upErr } = await supabase.storage.from('memes').upload(fileName, blob, {
@@ -752,9 +758,8 @@
         if (upErr) throw upErr;
         const { data: url } = supabase.storage.from('memes').getPublicUrl(upload.path);
 
-        const { data: u } = await supabase.auth.getUser();
         const { error: dbErr } = await supabase.from('memes').insert({
-          author_id: u.user.id,
+          author_id: user.id,
           template_key: tSelect.value,
           top_text: topIn.value,
           bottom_text: botIn.value,
@@ -771,23 +776,91 @@
     }
     publishBtn.onclick = publish;
 
+    async function toggleLike(memeId) {
+      console.log('toggleLike called with memeId:', memeId); // Debug: Function entry
+      const user = auth.getCurrentUser();
+      console.log('Current user:', user); // Debug: Check user
+      if (!user || !user.id) {
+        console.error("toggleLike failed: user not found. Please sign in.");
+        alert('You must be signed in to like a post.');
+        return;
+      }
+      const userId = user.id;
+
+      // Check if a "like" record already exists from this user for this meme.
+      // We select 'meme_id' because we know it exists. We just need to see if a row is returned.
+      const { data: existingLike, error } = await supabase
+        .from('likes')
+        .select('meme_id') 
+        .eq('meme_id', memeId)
+        .eq('user_id', userId)
+        .maybeSingle(); // Use maybeSingle to avoid an error if no row is found.
+
+      if (error) {
+        console.error('Error checking for like:', error);
+        alert(`Error checking for like: ${error.message}`);
+        return;
+      }
+
+      if (existingLike) {
+        // If a like exists, delete it using the user_id and meme_id pair.
+        const { error: deleteError } = await supabase.from('likes').delete()
+          .eq('meme_id', memeId)
+          .eq('user_id', userId);
+        if (deleteError) {
+          console.error('Error unliking:', deleteError);
+          alert(`Error unliking: ${deleteError.message}`);
+        }
+      } else {
+        // If no like exists, insert a new one.
+        const { error: insertError } = await supabase.from('likes').insert({ meme_id: memeId, user_id: userId });
+        if (insertError) {
+          console.error('Error liking:', insertError);
+          alert(`Error liking: ${insertError.message}`);
+        }
+      }
+    }
+
     async function initApp() {
-      // live leaderboard (top 50)
+      // Ensure user state is fresh before fetching data
+      currentUserId = auth.getCurrentUser()?.id || null;
+
+      // Fetch initial leaderboard data
       const { data, error } = await supabase.from('meme_leaderboard')
         .select('*').order('like_count', { ascending: false }).limit(50);
       if (error) return alert(error.message);
-  if (!currentUserId) { const { data: u } = await supabase.auth.getUser(); currentUserId = u?.user?.id || null; }
+      
       renderFeed(data);
+
+      // Set up a real-time subscription to automatically refresh the feed on any change
+      const refreshFeed = async (payload) => {
+        console.log('Database change detected, refreshing feed...', payload);
+        const { data: updatedData, error: fetchError } = await supabase.from('meme_leaderboard')
+          .select('*').order('like_count', { ascending: false }).limit(50);
+        if (fetchError) {
+          console.error('Error refetching leaderboard after change:', fetchError);
+        } else {
+          console.log('Feed refreshed successfully');
+          renderFeed(updatedData);
+        }
+      };
+
+      // Listen for changes in both memes and likes tables
+      supabase.channel('all-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'memes' }, refreshFeed)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, refreshFeed)
+        .subscribe((status) => {
+          console.log('Real-time subscription status:', status);
+        });
     }
 
-  function renderFeed(items) {
+    function renderFeed(items) {
       feed.innerHTML = '';
       items.forEach(m => {
         const card = document.createElement('div'); 
         card.className = 'card meme-card';
-        // Support either m.id (memes table) or m.meme_id (leaderboard view alias)
-        const rowId = (m.id !== undefined && m.id !== null) ? m.id : (m.meme_id !== undefined ? m.meme_id : null);
-        const canDelete = currentUserId && m.author_id === currentUserId && rowId !== null;
+        const rowId = m.meme_id ?? m.id;
+        const canDelete = currentUserId && m.author_id === currentUserId && rowId != null;
         card.innerHTML = `
           <img src="${m.image_url}" alt="Meme"/>
           <div class="likes">
@@ -799,71 +872,36 @@
     }
 
     feed.addEventListener('click', async (e)=>{
+      console.log('Feed clicked!', e.target); // Debug: Check if click is detected
       const likeBtn = e.target.closest('button[data-like]');
       const delBtn = e.target.closest('button[data-del]');
+      console.log('Like button found:', likeBtn); // Debug: Check if like button is found
+      console.log('Delete button found:', delBtn); // Debug: Check if delete button is found
       if (!likeBtn && !delBtn) return;
+      
       const targetBtn = likeBtn || delBtn;
       targetBtn.disabled = true;
+
       try {
         if (likeBtn) {
           const memeId = likeBtn.dataset.like;
-          const { data: u } = await supabase.auth.getUser();
-          const { error: insErr } = await supabase.from('likes').insert({ meme_id: memeId, user_id: u.user.id });
-          if (insErr) {
-            await supabase.from('likes').delete().eq('meme_id', memeId).eq('user_id', u.user.id);
-          }
+          console.log('About to toggle like for meme ID:', memeId); // Debug: Check meme ID
+          await toggleLike(memeId);
+          // Manual refresh after like action to ensure UI updates
+          console.log('Manually refreshing feed after like action...');
+          const { data } = await supabase.from('meme_leaderboard')
+            .select('*').order('like_count', { ascending: false }).limit(50);
+          renderFeed(data);
         } else if (delBtn) {
           const memeId = delBtn.dataset.del;
           if (!memeId) { alert('Cannot determine meme id for deletion.'); return; }
           if (!confirm('Delete this meme? This cannot be undone.')) return;
           
-          // Try RPC function first (bypasses RLS issues)
-          try {
-            const { data: rpcResult, error: rpcErr } = await supabase.rpc('delete_user_meme', { meme_id: memeId });
-            if (!rpcErr && rpcResult) {
-              console.log('Delete via RPC succeeded');
-              // Remove card from UI
-              const card = delBtn.closest('.card');
-              if (card) card.remove();
-              alert('Meme deleted successfully!');
-            } else {
-              throw new Error(rpcErr?.message || 'RPC delete failed');
-            }
-          } catch (rpcError) {
-            console.warn('RPC delete failed, trying direct delete:', rpcError);
-            
-            // Fallback to direct delete with extensive debugging
-            if (!currentUserId) { 
-              const { data: u } = await supabase.auth.getUser(); 
-              currentUserId = u?.user?.id || null; 
-            }
-            
-            console.log('Direct delete attempt for memeId:', memeId, 'currentUserId:', currentUserId);
-            
-            // Try direct delete without RLS complications
-            const { data: deletedRows, error: delErr } = await supabase
-              .from('memes')
-              .delete()
-              .eq('id', memeId)
-              .eq('author_id', currentUserId)
-              .select('id');
-              
-            console.log('Direct delete result:', { deletedRows, delErr });
-            
-            if (delErr) {
-              alert('Delete failed: ' + delErr.message);
-            } else if (!deletedRows || deletedRows.length === 0) {
-              alert('Delete failed: No rows affected. Check if you own this meme or if RLS policies are blocking deletion.');
-            } else {
-              console.log('Direct delete succeeded');
-              const card = delBtn.closest('.card');
-              if (card) card.remove();
-              alert('Meme deleted successfully!');
-            }
+          const { error: rpcErr } = await supabase.rpc('delete_user_meme', { meme_id: memeId });
+          if (rpcErr) {
+            alert('Delete failed: ' + rpcErr.message);
           }
         }
-        const { data } = await supabase.from('meme_leaderboard').select('*').order('like_count', { ascending: false }).limit(50);
-        renderFeed(data);
       } finally {
         targetBtn.disabled = false;
       }
