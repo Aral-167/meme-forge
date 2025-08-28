@@ -883,13 +883,21 @@
         if (upErr) throw upErr;
         const { data: url } = supabase.storage.from('memes').getPublicUrl(upload.path);
 
-        const { error: dbErr } = await supabase.from('memes').insert({
+        // Prepare meme data with optional middle text
+        const memeData = {
           author_id: user.id,
           template_key: tSelect.value,
           top_text: topIn.value,
           bottom_text: botIn.value,
           image_url: url.publicUrl
-        });
+        };
+        
+        // Add middle text if using distracted template
+        if (tSelect.value === 'distracted' && midIn && midIn.value.trim()) {
+          memeData.mid_text = midIn.value;
+        }
+
+        const { error: dbErr } = await supabase.from('memes').insert(memeData);
         if (dbErr) throw dbErr;
 
         alert('Published!');
@@ -958,6 +966,8 @@
       // Set up a real-time subscription to automatically refresh the feed on any change
       const refreshFeed = async (payload) => {
         console.log('Database change detected, refreshing feed...', payload);
+        // Ensure user state is fresh before re-rendering
+        currentUserId = auth.getCurrentUser()?.id || null;
         const { data: updatedData, error: fetchError } = await supabase.from('meme_leaderboard')
           .select('*').order('like_count', { ascending: false }).limit(50);
         if (fetchError) {
@@ -1007,6 +1017,7 @@
           const memeId = likeBtn.dataset.like;
           await toggleLike(memeId);
           // Manual refresh after like action to ensure UI updates
+          currentUserId = auth.getCurrentUser()?.id || null;
           const { data } = await supabase.from('meme_leaderboard')
             .select('*').order('like_count', { ascending: false }).limit(50);
           renderFeed(data);
