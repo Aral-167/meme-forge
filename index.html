@@ -5,23 +5,53 @@
   <title>Meme Forge</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    :root {
+      --primary-color: #4a5568; /* A muted blue-gray */
+      --danger-color: #c53030;  /* A muted red */
+      --like-color: #d69e2e;   /* A muted yellow/orange */
+      --light-gray: #f7fafc;
+      --gray: #e2e8f0;
+      --dark-gray: #a0aec0;
+      --text-color: #2d3748;
+      --card-bg: white;
+      --subtitle-color: #718096;
+      --input-bg: white;
+      --input-border: #e2e8f0;
+      --shadow-light: rgba(0,0,0,0.08);
+      --shadow-hover: rgba(0,0,0,0.1);
+    }
+    
+    /* Dark mode variables */
+    [data-theme="dark"] {
+      --primary-color: #6b7280;
+      --danger-color: #ef4444;
+      --like-color: #f59e0b;
+      --light-gray: #111827;
+      --gray: #374151;
+      --dark-gray: #6b7280;
+      --text-color: #f9fafb;
+      --card-bg: #1f2937;
+      --subtitle-color: #9ca3af;
+      --input-bg: #374151;
+      --input-border: #4b5563;
+      --shadow-light: rgba(0,0,0,0.3);
+      --shadow-hover: rgba(0,0,0,0.4);
+    }
     * { box-sizing: border-box; }
     body { 
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       margin: 0; padding: 20px; max-width: 1400px; margin: 0 auto;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh; color: #333; line-height: 1.6;
+      background-color: var(--light-gray);
+      min-height: 100vh; color: var(--text-color); line-height: 1.6;
+      transition: all 0.3s ease;
     }
     h1 { 
-      text-align: center; color: white; font-size: 3em; margin-bottom: 8px;
-      text-shadow: 2px 2px 8px rgba(0,0,0,0.4); font-weight: 700;
-      background: linear-gradient(45deg, #fff, #e0e7ff);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
+      text-align: center; color: var(--text-color); font-size: 3em; margin-bottom: 8px;
+      font-weight: 700;
     }
     .subtitle {
-      text-align: center; color: rgba(255,255,255,0.9); margin-bottom: 40px;
-      font-size: 1.2em; font-weight: 300; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+      text-align: center; color: var(--subtitle-color); margin-bottom: 40px;
+      font-size: 1.2em; font-weight: 300;
     }
     .row { 
       display: grid; gap: 24px; 
@@ -29,17 +59,17 @@
       margin-bottom: 32px;
     }
     .card { 
-      background: rgba(255,255,255,0.95); border-radius: 20px; padding: 28px; 
-      box-shadow: 0 12px 48px rgba(0,0,0,0.15);
-      backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.3);
-      transition: all 0.3s ease; position: relative; overflow: hidden;
+      background: var(--card-bg); border-radius: 16px; padding: 28px; 
+      box-shadow: 0 4px 12px var(--shadow-light);
+      border: 1px solid var(--gray);
+      transition: all 0.3s ease;
     }
     .card:hover { 
-      transform: translateY(-5px); 
-      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      transform: translateY(-4px); 
+      box-shadow: 0 10px 20px var(--shadow-hover);
     }
     .card h3 { 
-      margin-top: 0; color: #333; font-size: 1.5em; font-weight: 600;
+      margin-top: 0; color: var(--text-color); font-size: 1.5em; font-weight: 600;
       margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
     }
     .feed-header::before { content: '🏆'; }
@@ -47,94 +77,98 @@
     .secret-header::before { content: '🔑'; }
     
     canvas, img { 
-      max-width: 100%; border-radius: 16px; 
-      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-      border: 3px solid rgba(255,255,255,0.8);
-      transition: all 0.3s ease;
-    }
-    canvas:hover, img:hover {
-      transform: scale(1.02);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+      max-width: 100%; border-radius: 12px; 
+      box-shadow: 0 4px 12px var(--shadow-light);
+      border: 1px solid var(--gray);
     }
     
     input, select, button { 
-      padding: 14px 18px; border-radius: 14px; border: 2px solid rgba(225,229,233,0.8);
+      padding: 14px 18px; border-radius: 10px; border: 1px solid var(--input-border);
       font-size: 15px; transition: all 0.3s ease;
       width: 100%; margin-bottom: 16px; font-family: inherit;
-      background: rgba(255,255,255,0.9);
+      background-color: var(--input-bg);
+      color: var(--text-color);
     }
     input:focus, select:focus {
-      outline: none; border-color: #667eea; 
-      box-shadow: 0 0 0 4px rgba(102,126,234,0.15);
-      background: white; transform: translateY(-1px);
+      outline: none; border-color: var(--primary-color); 
+      box-shadow: 0 0 0 3px rgba(74, 85, 104, 0.2);
+      background: var(--input-bg);
     }
     
     button { 
-      cursor: pointer; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: pointer; background-color: var(--primary-color);
       color: white; border: none; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.8px; transition: all 0.3s ease; position: relative;
-      overflow: hidden; font-size: 14px;
+      letter-spacing: 0.8px; transition: all 0.2s ease;
     }
-    button::before {
-      content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-      transition: all 0.5s; z-index: 1;
-    }
-    button:hover::before { left: 100%; }
     button:hover { 
-      transform: translateY(-3px); 
-      box-shadow: 0 8px 25px rgba(102,126,234,0.4);
+      transform: translateY(-2px); 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
     button:active { transform: translateY(-1px); }
     button:disabled { 
       opacity: 0.6; cursor: not-allowed; transform: none; 
-      background: #999; box-shadow: none;
+      background: var(--dark-gray); box-shadow: none;
     }
     
     .danger-btn {
-      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%) !important;
+      background-color: var(--danger-color) !important;
       font-size: 12px !important; padding: 8px 12px !important;
       margin-left: 8px !important; width: auto !important;
     }
     .danger-btn:hover {
-      box-shadow: 0 8px 25px rgba(255,107,107,0.4) !important;
+      box-shadow: 0 4px 12px rgba(197, 48, 48, 0.3) !important;
     }
     
     .hidden { display: none }
     .likes { 
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-      padding: 12px 0; border-top: 1px solid #f0f0f0; margin-top: 12px;
+      padding: 12px 0; border-top: 1px solid var(--gray); margin-top: 12px;
     }
     .likes button {
       padding: 8px 12px; margin: 0; width: auto; font-size: 13px;
       text-transform: none; letter-spacing: normal;
     }
-    .likes strong { color: #667eea; font-size: 16px; }
+    .likes strong { color: var(--primary-color); font-size: 16px; }
     .toolbar { 
-      display: flex; justify-content: flex-end; margin-bottom: 24px;
+      display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 24px;
     }
     .toolbar button {
-      background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);
-      backdrop-filter: blur(10px); width: auto; margin: 0;
+      background: transparent; color: var(--text-color); border: 1px solid var(--gray);
+      width: auto; margin: 0;
     }
     .toolbar button:hover {
-      background: rgba(255,255,255,0.3);
+      background: var(--gray);
+    }
+    
+    /* Theme toggle button */
+    .theme-toggle {
+      background: var(--card-bg) !important;
+      border: 2px solid var(--gray) !important;
+      border-radius: 50px !important;
+      width: 50px !important;
+      height: 50px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-size: 20px !important;
+      padding: 0 !important;
+      transition: all 0.3s ease !important;
+      margin: 0 !important;
+    }
+    .theme-toggle:hover {
+      transform: scale(1.1) !important;
+      box-shadow: 0 4px 12px var(--shadow-light) !important;
     }
     .secondary-btn {
-      background: #f8f9fa !important; color: #666 !important; 
-      border: 2px solid #e9ecef !important;
+      background: var(--light-gray) !important; color: var(--text-color) !important; 
+      border: 1px solid var(--gray) !important;
     }
     .secondary-btn:hover {
-      background: #e9ecef !important; transform: translateY(-1px);
+      background: var(--gray) !important; transform: translateY(-1px);
     }
-    .danger-btn {
-      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%) !important;
-    }
-    .danger-btn:hover {
-      box-shadow: 0 6px 20px rgba(255,107,107,0.3);
-    }
+    
     label {
-      display: block; margin-bottom: 8px; font-weight: 600; color: #555;
+      display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-color);
     }
     .form-group {
       margin-bottom: 20px;
@@ -157,12 +191,11 @@
       border: 1px solid #f5c6cb; margin-bottom: 16px;
     }
     .meme-card {
-      margin-bottom: 24px; transition: all 0.3s ease;
-      border: 2px solid rgba(255,255,255,0.1);
+      margin-bottom: 24px;
+      border: 1px solid var(--gray);
     }
     .meme-card:hover {
-      border-color: rgba(102,126,234,0.3);
-      transform: translateY(-2px);
+      border-color: var(--primary-color);
     }
     .meme-card img {
       width: 100%; height: auto; margin-bottom: 16px;
@@ -170,36 +203,22 @@
     }
     .likes {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 0; border-top: 2px solid rgba(240,240,240,0.5);
+      padding: 12px 0; border-top: 1px solid var(--gray);
       margin-top: 16px;
     }
     .likes button {
       margin: 0; width: auto; font-size: 16px; font-weight: 700;
       padding: 10px 20px; border-radius: 25px;
       display: flex; align-items: center; gap: 8px;
-      transition: all 0.3s ease; text-transform: none;
+      transition: all 0.2s ease; text-transform: none;
       letter-spacing: 0;
     }
     .likes button[data-like] {
-      background: linear-gradient(135deg, #ff6b9d 0%, #c44569 100%);
-      position: relative; overflow: hidden;
+      background-color: var(--like-color);
     }
     .likes button[data-like]:hover {
-      background: linear-gradient(135deg, #ff5e95 0%, #b83955 100%);
       transform: scale(1.05);
-      box-shadow: 0 8px 25px rgba(255,107,157,0.4);
-    }
-    .likes button[data-like]:active {
-      transform: scale(0.95);
-    }
-    .likes button[data-like]::before {
-      content: ''; position: absolute; top: 50%; left: 50%;
-      width: 0; height: 0; background: rgba(255,255,255,0.3);
-      border-radius: 50%; transform: translate(-50%, -50%);
-      transition: all 0.3s ease;
-    }
-    .likes button[data-like]:active::before {
-      width: 100px; height: 100px;
+      box-shadow: 0 6px 15px rgba(214, 158, 46, 0.4);
     }
     
     .auth-section { text-align: center; }
@@ -217,20 +236,20 @@
     
     .feed-container {
       max-height: 70vh; overflow-y: auto; padding: 20px;
-      background: rgba(255,255,255,0.05); border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.1);
+      background: #fcfcfc; border-radius: 16px;
+      border: 1px solid var(--gray);
     }
     .feed-container::-webkit-scrollbar {
       width: 8px;
     }
     .feed-container::-webkit-scrollbar-track {
-      background: rgba(255,255,255,0.1); border-radius: 4px;
+      background: var(--light-gray); border-radius: 4px;
     }
     .feed-container::-webkit-scrollbar-thumb {
-      background: rgba(102,126,234,0.6); border-radius: 4px;
+      background: var(--dark-gray); border-radius: 4px;
     }
     .feed-container::-webkit-scrollbar-thumb:hover {
-      background: rgba(102,126,234,0.8);
+      background: var(--primary-color);
     }
     @media (max-width: 768px) {
       .row { grid-template-columns: 1fr; }
@@ -422,6 +441,31 @@
     const emailIn = $('#email'); const passIn = $('#pass');
     const signUpBtn = $('#signUp'); const signInBtn = $('#signIn'); const signOutBtn = $('#signOut');
     const forgotBtn = $('#forgotPassword');
+    const themeToggle = $('#themeToggle');
+    
+    // ---------- Theme Management ----------
+    const themeKey = 'meme_forge_theme';
+    
+    function getStoredTheme() {
+      return localStorage.getItem(themeKey) || 'light';
+    }
+    
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem(themeKey, theme);
+      themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+      themeToggle.title = theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    }
+    
+    function toggleTheme() {
+      const currentTheme = getStoredTheme();
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      setTheme(newTheme);
+    }
+    
+    // Initialize theme
+    setTheme(getStoredTheme());
+    themeToggle.addEventListener('click', toggleTheme);
     
     // Password reset
     const resetEmailIn = $('#resetEmail');
@@ -1053,6 +1097,7 @@
   <h1>🎭 Meme Forge</h1>
   <p class="subtitle">Create, Share & Battle Epic Memes</p>
   <div class="toolbar">
+    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">🌙</button>
     <button id="signOut" class="hidden">👋 Sign Out</button>
   </div>
 
