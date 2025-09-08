@@ -5,15 +5,262 @@
   <title>Meme Forge</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui; margin: 24px; max-width: 980px }
-    .row { display: grid; gap: 16px; grid-template-columns: 1fr 1fr }
-    .card { border:1px solid #eee; border-radius:12px; padding:12px }
-    canvas, img { max-width:100%; border-radius:12px; border:1px solid #ddd }
-    input, select, button { padding:8px 10px; border-radius:10px; border:1px solid #ddd }
-    button { cursor:pointer }
-    .hidden{ display:none }
-    .likes { display:flex; align-items:center; gap:8px }
-  .toolbar { display:flex; justify-content:flex-end; margin-bottom:12px }
+    :root {
+      --primary-color: #4a5568; /* A muted blue-gray */
+      --danger-color: #c53030;  /* A muted red */
+      --like-color: #d69e2e;   /* A muted yellow/orange */
+      --light-gray: #f7fafc;
+      --gray: #e2e8f0;
+      --dark-gray: #a0aec0;
+      --text-color: #2d3748;
+      --card-bg: white;
+      --subtitle-color: #718096;
+      --input-bg: white;
+      --input-border: #e2e8f0;
+      --shadow-light: rgba(0,0,0,0.08);
+      --shadow-hover: rgba(0,0,0,0.1);
+    }
+    
+    /* Dark mode variables */
+    [data-theme="dark"] {
+      --primary-color: #6b7280;
+      --danger-color: #ef4444;
+      --like-color: #f59e0b;
+      --light-gray: #111827;
+      --gray: #374151;
+      --dark-gray: #6b7280;
+      --text-color: #f9fafb;
+      --card-bg: #1f2937;
+      --subtitle-color: #9ca3af;
+      --input-bg: #374151;
+      --input-border: #4b5563;
+      --shadow-light: rgba(0,0,0,0.3);
+      --shadow-hover: rgba(0,0,0,0.4);
+    }
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      margin: 0; padding: 20px; max-width: 1400px; margin: 0 auto;
+      background-color: var(--light-gray);
+      min-height: 100vh; color: var(--text-color); line-height: 1.6;
+      transition: all 0.3s ease;
+    }
+    h1 { 
+      text-align: center; color: var(--text-color); font-size: 3em; margin-bottom: 8px;
+      font-weight: 700;
+    }
+    .subtitle {
+      text-align: center; color: var(--subtitle-color); margin-bottom: 40px;
+      font-size: 1.2em; font-weight: 300;
+    }
+    .row { 
+      display: grid; gap: 24px; 
+      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      margin-bottom: 32px;
+    }
+    .card { 
+      background: var(--card-bg); border-radius: 16px; padding: 28px; 
+      box-shadow: 0 4px 12px var(--shadow-light);
+      border: 1px solid var(--gray);
+      transition: all 0.3s ease;
+    }
+    .card:hover { 
+      transform: translateY(-4px); 
+      box-shadow: 0 10px 20px var(--shadow-hover);
+    }
+    .card h3 { 
+      margin-top: 0; color: var(--text-color); font-size: 1.5em; font-weight: 600;
+      margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
+    }
+    .feed-header::before { content: '🏆'; }
+    .auth-header::before { content: '🔐'; }
+    .secret-header::before { content: '🔑'; }
+    
+    canvas, img { 
+      max-width: 100%; border-radius: 12px; 
+      box-shadow: 0 4px 12px var(--shadow-light);
+      border: 1px solid var(--gray);
+    }
+    
+    input, select, button { 
+      padding: 14px 18px; border-radius: 10px; border: 1px solid var(--input-border);
+      font-size: 15px; transition: all 0.3s ease;
+      width: 100%; margin-bottom: 16px; font-family: inherit;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+    input:focus, select:focus {
+      outline: none; border-color: var(--primary-color); 
+      box-shadow: 0 0 0 3px rgba(74, 85, 104, 0.2);
+      background: var(--input-bg);
+    }
+    
+    button { 
+      cursor: pointer; background-color: var(--primary-color);
+      color: white; border: none; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; transition: all 0.2s ease;
+    }
+    button:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    button:active { transform: translateY(-1px); }
+    button:disabled { 
+      opacity: 0.6; cursor: not-allowed; transform: none; 
+      background: var(--dark-gray); box-shadow: none;
+    }
+    
+    .danger-btn {
+      background-color: var(--danger-color) !important;
+      font-size: 12px !important; padding: 8px 12px !important;
+      margin-left: 8px !important; width: auto !important;
+    }
+    .danger-btn:hover {
+      box-shadow: 0 4px 12px rgba(197, 48, 48, 0.3) !important;
+    }
+    
+    .hidden { display: none }
+    .likes { 
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 12px 0; border-top: 1px solid var(--gray); margin-top: 12px;
+    }
+    .likes button {
+      padding: 8px 12px; margin: 0; width: auto; font-size: 13px;
+      text-transform: none; letter-spacing: normal;
+    }
+    .likes strong { color: var(--primary-color); font-size: 16px; }
+    .toolbar { 
+      display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 24px;
+    }
+    .toolbar button {
+      background: transparent; color: var(--text-color); border: 1px solid var(--gray);
+      width: auto; margin: 0;
+    }
+    .toolbar button:hover {
+      background: var(--gray);
+    }
+    
+    /* Theme toggle button */
+    .theme-toggle {
+      background: var(--card-bg) !important;
+      border: 2px solid var(--gray) !important;
+      border-radius: 50px !important;
+      width: 50px !important;
+      height: 50px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-size: 20px !important;
+      padding: 0 !important;
+      transition: all 0.3s ease !important;
+      margin: 0 !important;
+    }
+    .theme-toggle:hover {
+      transform: scale(1.1) !important;
+      box-shadow: 0 4px 12px var(--shadow-light) !important;
+    }
+    .secondary-btn {
+      background: var(--light-gray) !important; color: var(--text-color) !important; 
+      border: 1px solid var(--gray) !important;
+    }
+    .secondary-btn:hover {
+      background: var(--gray) !important; transform: translateY(-1px);
+    }
+    
+    label {
+      display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-color);
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .button-group {
+      display: flex; gap: 12px; flex-wrap: wrap;
+    }
+    .button-group button {
+      flex: 1; min-width: 120px;
+    }
+    .preview-container {
+      text-align: center; margin: 16px 0;
+    }
+    .success-message {
+      background: #d4edda; color: #155724; padding: 12px; border-radius: 8px;
+      border: 1px solid #c3e6cb; margin-bottom: 16px;
+    }
+    .error-message {
+      background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px;
+      border: 1px solid #f5c6cb; margin-bottom: 16px;
+    }
+    .meme-card {
+      margin-bottom: 24px;
+      border: 1px solid var(--gray);
+    }
+    .meme-card:hover {
+      border-color: var(--primary-color);
+    }
+    .meme-card img {
+      width: 100%; height: auto; margin-bottom: 16px;
+      border-radius: 12px;
+    }
+    .likes {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 0; border-top: 1px solid var(--gray);
+      margin-top: 16px;
+    }
+    .likes button {
+      margin: 0; width: auto; font-size: 16px; font-weight: 700;
+      padding: 10px 20px; border-radius: 25px;
+      display: flex; align-items: center; gap: 8px;
+      transition: all 0.2s ease; text-transform: none;
+      letter-spacing: 0;
+    }
+    .likes button[data-like] {
+      background-color: var(--like-color);
+    }
+    .likes button[data-like]:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 15px rgba(214, 158, 46, 0.4);
+    }
+    
+    .auth-section { text-align: center; }
+    .auth-section input { margin-bottom: 12px; }
+    .auth-section button { margin: 8px 0; }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block; margin-bottom: 8px; font-weight: 600;
+      color: #555; font-size: 14px; text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .feed-container {
+      max-height: 70vh; overflow-y: auto; padding: 20px;
+      background: #fcfcfc; border-radius: 16px;
+      border: 1px solid var(--gray);
+    }
+    .feed-container::-webkit-scrollbar {
+      width: 8px;
+    }
+    .feed-container::-webkit-scrollbar-track {
+      background: var(--light-gray); border-radius: 4px;
+    }
+    .feed-container::-webkit-scrollbar-thumb {
+      background: var(--dark-gray); border-radius: 4px;
+    }
+    .feed-container::-webkit-scrollbar-thumb:hover {
+      background: var(--primary-color);
+    }
+    @media (max-width: 768px) {
+      .row { grid-template-columns: 1fr; }
+      h1 { font-size: 2.2em; }
+      .card { padding: 20px; }
+      body { padding: 16px; }
+      .button-group { flex-direction: column; }
+      .button-group button { width: 100%; }
+      .likes { flex-direction: column; gap: 12px; }
+      .likes button { width: 100%; justify-content: center; }
+    }
   </style>
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -21,7 +268,166 @@
     const SUPABASE_URL = 'https://ycmozdaoyqarwwpxudxa.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbW96ZGFveXFhcnd3cHh1ZHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3MTkyNTgsImV4cCI6MjA3MTI5NTI1OH0.nFCCRHbEWibEfS5fdV77s0iyaxr8TsG0q-LRdK0zhAg';
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  let currentUserId = null;
+
+    // Custom Auth System
+    class CustomAuth {
+      constructor() {
+        this.currentUser = null;
+        this.sessionKey = 'meme_forge_session';
+        this.loadSession();
+      }
+
+      // Generate a simple hash (in production, use proper bcrypt)
+      async hashPassword(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password + 'meme_forge_salt');
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      generateUserId() {
+        return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      }
+
+      generateSessionToken() {
+        return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 16);
+      }
+
+      saveSession(user, token) {
+        const session = { user, token, expires: Date.now() + (7 * 24 * 60 * 60 * 1000) }; // 7 days
+        localStorage.setItem(this.sessionKey, JSON.stringify(session));
+        this.currentUser = user;
+      }
+
+      loadSession() {
+        try {
+          const stored = localStorage.getItem(this.sessionKey);
+          if (!stored) return false;
+          const session = JSON.parse(stored);
+          if (session.expires < Date.now()) {
+            this.clearSession();
+            return false;
+          }
+          this.currentUser = session.user;
+          return true;
+        } catch {
+          this.clearSession();
+          return false;
+        }
+      }
+
+      clearSession() {
+        localStorage.removeItem(this.sessionKey);
+        this.currentUser = null;
+      }
+
+      isAuthenticated() {
+        return this.currentUser !== null;
+      }
+
+      getCurrentUser() {
+        return this.currentUser;
+      }
+
+      async signUp(email, password) {
+        try {
+          const hashedPassword = await this.hashPassword(password);
+          const userId = this.generateUserId();
+          
+          // Check if user already exists
+          const { data: existing } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email.toLowerCase())
+            .single();
+          
+          if (existing) {
+            throw new Error('User already exists with this email');
+          }
+
+          // Create user record
+          const { data, error } = await supabase
+            .from('users')
+            .insert({
+              id: userId,
+              email: email.toLowerCase(),
+              password_hash: hashedPassword,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          // Create profile record
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: userId,
+              email: email.toLowerCase()
+            });
+
+          if (profileError) {
+            console.warn('Profile creation failed:', profileError.message);
+            // Don't fail the signup if profile creation fails
+          }
+
+          return { success: true, user: data };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+
+      async signIn(email, password) {
+        try {
+          const hashedPassword = await this.hashPassword(password);
+          
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email.toLowerCase())
+            .eq('password_hash', hashedPassword)
+            .single();
+
+          if (error || !data) {
+            throw new Error('Invalid email or password');
+          }
+
+          const sessionToken = this.generateSessionToken();
+          const user = { id: data.id, email: data.email };
+          
+          this.saveSession(user, sessionToken);
+          return { success: true, user };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+
+      signOut() {
+        this.clearSession();
+        return { success: true };
+      }
+
+      async resetPassword(email, newPassword) {
+        try {
+          const hashedPassword = await this.hashPassword(newPassword);
+          
+          const { error } = await supabase
+            .from('users')
+            .update({ password_hash: hashedPassword })
+            .eq('email', email.toLowerCase());
+
+          if (error) throw error;
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+    }
+
+    const auth = new CustomAuth();
+    let currentUserId = auth.getCurrentUser()?.id || null;
 
     // ---------- Elements ----------
     const $ = (q) => document.querySelector(q);
@@ -35,6 +441,31 @@
     const emailIn = $('#email'); const passIn = $('#pass');
     const signUpBtn = $('#signUp'); const signInBtn = $('#signIn'); const signOutBtn = $('#signOut');
     const forgotBtn = $('#forgotPassword');
+    const themeToggle = $('#themeToggle');
+    
+    // ---------- Theme Management ----------
+    const themeKey = 'meme_forge_theme';
+    
+    function getStoredTheme() {
+      return localStorage.getItem(themeKey) || 'light';
+    }
+    
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem(themeKey, theme);
+      themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+      themeToggle.title = theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    }
+    
+    function toggleTheme() {
+      const currentTheme = getStoredTheme();
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      setTheme(newTheme);
+    }
+    
+    // Initialize theme
+    setTheme(getStoredTheme());
+    themeToggle.addEventListener('click', toggleTheme);
     
     // Password reset
     const resetEmailIn = $('#resetEmail');
@@ -148,8 +579,6 @@
 
     // ---------- UI state ----------
     async function refreshSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      
       // Check if this is a password reset flow
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('type') === 'recovery') {
@@ -161,13 +590,12 @@
         return;
       }
       
-      if (!session) return show(authView);
-  // cache current user id
-  const { data: uInfo } = await supabase.auth.getUser();
-  currentUserId = uInfo?.user?.id || null;
+      if (!auth.isAuthenticated()) return show(authView);
+      // cache current user id
+      currentUserId = auth.getCurrentUser().id;
 
       // does user have meme secret saved?
-      const { data: prof } = await supabase.from('profiles').select('meme_template_key').single();
+      const { data: prof } = await supabase.from('profiles').select('meme_template_key').eq('user_id', currentUserId).single();
       if (!prof || !prof.meme_template_key) {
         show(setupView);
         return;
@@ -186,17 +614,20 @@
 
     // ---------- Auth ----------
     signUpBtn.onclick = async () => {
-      const { error } = await supabase.auth.signUp({ email: emailIn.value, password: passIn.value });
-      if (error) return alert(error.message);
-      alert('Account created. Sign in now.');
+      const result = await auth.signUp(emailIn.value, passIn.value);
+      if (result.error) return alert(result.error);
+      currentUserId = result.user.id;
+      show(setupView);
     };
     signInBtn.onclick = async () => {
-      const { error } = await supabase.auth.signInWithPassword({ email: emailIn.value, password: passIn.value });
-      if (error) return alert(error.message);
-      await refreshSession();
+      const result = await auth.signIn(emailIn.value, passIn.value);
+      if (result.error) return alert(result.error);
+      currentUserId = result.user.id;
+      show(verifyView);
     };
     signOutBtn.onclick = async () => {
-      await supabase.auth.signOut();
+      auth.signOut();
+      currentUserId = null;
       show(authView);
     };
 
@@ -214,15 +645,41 @@
         alert('Please enter your email address.');
         return;
       }
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmailIn.value, {
-        redirectTo: window.location.origin + window.location.pathname + '?type=recovery'
-      });
-      if (error) return alert(error.message);
-      alert('Password reset email sent! Check your inbox and click the link.');
+      
+      // Check if user exists
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', resetEmailIn.value.toLowerCase())
+        .single();
+        
+      if (!user) {
+        alert('No account found with this email address.');
+        return;
+      }
+      
+      // Store email for reset process
+      window.resetEmail = resetEmailIn.value.toLowerCase();
+      
+      // Show meme verification form directly (no email link needed)
+      document.getElementById('resetEmailForm').style.display = 'none';
+      document.getElementById('resetMemeForm').style.display = 'block';
+      alert('Please verify your meme password to proceed with password reset.');
     };
 
     verifyMemeBtn.onclick = async () => {
-      const argsBase = { template_key: resetTpl.value, top_text: resetTop.value, bottom_text: resetBot.value };
+      if (!window.resetEmail) {
+        alert('Reset session expired. Please start over.');
+        show(authView);
+        return;
+      }
+      
+      const argsBase = { 
+        template_key: resetTpl.value, 
+        top_text: resetTop.value, 
+        bottom_text: resetBot.value,
+        user_email: window.resetEmail  // Pass email to verify for correct user
+      };
       const args = (resetTpl.value === 'distracted' && resetMid) ? { ...argsBase, mid_text: resetMid.value } : argsBase;
       let { data, error } = await supabase.rpc('verify_meme_secret', args);
       if (error && args.mid_text) { // fallback
@@ -250,18 +707,36 @@
         return;
       }
       
-      const { error } = await supabase.auth.updateUser({ password: newPassIn.value });
-      if (error) return alert(error.message);
+      if (!window.resetEmail) {
+        alert('Reset session expired. Please start over.');
+        show(authView);
+        return;
+      }
+      
+      const result = await auth.resetPassword(window.resetEmail, newPassIn.value);
+      if (!result.success) return alert(result.error);
+      
+      // Clear reset session
+      delete window.resetEmail;
       
       alert('Password updated successfully! You can now sign in with your new password.');
-      // Clear the URL parameters and go to auth
-      window.history.replaceState({}, document.title, window.location.pathname);
       show(authView);
     };
 
     // ---------- Meme password setup (once) ----------
     sSave.onclick = async () => {
-      const argsBase = { template_key: sTpl.value, top_text: sTop.value, bottom_text: sBot.value };
+      if (!currentUserId) {
+        alert('User session expired. Please sign in again.');
+        show(authView);
+        return;
+      }
+      
+      const argsBase = { 
+        template_key: sTpl.value, 
+        top_text: sTop.value, 
+        bottom_text: sBot.value,
+        user_id: currentUserId
+      };
       const args = (sTpl.value === 'distracted' && sMid) ? { ...argsBase, mid_text: sMid.value } : argsBase;
       let { error } = await supabase.rpc('set_meme_secret', args);
       if (error && args.mid_text) { // fallback if RPC not updated yet
@@ -274,7 +749,18 @@
 
     // ---------- Verify meme password (each login) ----------
     vCheck.onclick = async () => {
-      const argsBase = { template_key: vTpl.value, top_text: vTop.value, bottom_text: vBot.value };
+      if (!currentUserId) {
+        alert('User session expired. Please sign in again.');
+        show(authView);
+        return;
+      }
+      
+      const argsBase = { 
+        template_key: vTpl.value, 
+        top_text: vTop.value, 
+        bottom_text: vBot.value,
+        user_id: currentUserId
+      };
       const args = (vTpl.value === 'distracted' && vMid) ? { ...argsBase, mid_text: vMid.value } : argsBase;
       let { data, error } = await supabase.rpc('verify_meme_secret', args);
       if (error && args.mid_text) { // fallback
@@ -427,6 +913,12 @@
     async function publish() {
       publishBtn.disabled = true;
       try {
+        const user = auth.getCurrentUser();
+        if (!user || !user.id) {
+          alert('You must be logged in to publish. Please refresh and sign in.');
+          return;
+        }
+
         const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
         const fileName = `memes/${Date.now()}.png`;
         const { data: upload, error: upErr } = await supabase.storage.from('memes').upload(fileName, blob, {
@@ -435,14 +927,21 @@
         if (upErr) throw upErr;
         const { data: url } = supabase.storage.from('memes').getPublicUrl(upload.path);
 
-        const { data: u } = await supabase.auth.getUser();
-        const { error: dbErr } = await supabase.from('memes').insert({
-          author_id: u.user.id,
+        // Prepare meme data with optional middle text
+        const memeData = {
+          author_id: user.id,
           template_key: tSelect.value,
           top_text: topIn.value,
           bottom_text: botIn.value,
           image_url: url.publicUrl
-        });
+        };
+        
+        // Add middle text if using distracted template
+        if (tSelect.value === 'distracted' && midIn && midIn.value.trim()) {
+          memeData.mid_text = midIn.value;
+        }
+
+        const { error: dbErr } = await supabase.from('memes').insert(memeData);
         if (dbErr) throw dbErr;
 
         alert('Published!');
@@ -454,28 +953,96 @@
     }
     publishBtn.onclick = publish;
 
+    async function toggleLike(memeId) {
+      const user = auth.getCurrentUser();
+      if (!user || !user.id) {
+        console.error("toggleLike failed: user not found. Please sign in.");
+        alert('You must be signed in to like a post.');
+        return;
+      }
+      const userId = user.id;
+
+      // Check if a "like" record already exists from this user for this meme.
+      // We select 'meme_id' because we know it exists. We just need to see if a row is returned.
+      const { data: existingLike, error } = await supabase
+        .from('likes')
+        .select('meme_id') 
+        .eq('meme_id', memeId)
+        .eq('user_id', userId)
+        .maybeSingle(); // Use maybeSingle to avoid an error if no row is found.
+
+      if (error) {
+        console.error('Error checking for like:', error);
+        alert(`Error checking for like: ${error.message}`);
+        return;
+      }
+
+      if (existingLike) {
+        // If a like exists, delete it using the user_id and meme_id pair.
+        const { error: deleteError } = await supabase.from('likes').delete()
+          .eq('meme_id', memeId)
+          .eq('user_id', userId);
+        if (deleteError) {
+          console.error('Error unliking:', deleteError);
+          alert(`Error unliking: ${deleteError.message}`);
+        }
+      } else {
+        // If no like exists, insert a new one.
+        const { error: insertError } = await supabase.from('likes').insert({ meme_id: memeId, user_id: userId });
+        if (insertError) {
+          console.error('Error liking:', insertError);
+          alert(`Error liking: ${insertError.message}`);
+        }
+      }
+    }
+
     async function initApp() {
-      // live leaderboard (top 50)
+      // Ensure user state is fresh before fetching data
+      currentUserId = auth.getCurrentUser()?.id || null;
+
+      // Fetch initial leaderboard data
       const { data, error } = await supabase.from('meme_leaderboard')
         .select('*').order('like_count', { ascending: false }).limit(50);
       if (error) return alert(error.message);
-  if (!currentUserId) { const { data: u } = await supabase.auth.getUser(); currentUserId = u?.user?.id || null; }
+      
       renderFeed(data);
+
+      // Set up a real-time subscription to automatically refresh the feed on any change
+      const refreshFeed = async (payload) => {
+        console.log('Database change detected, refreshing feed...', payload);
+        // Ensure user state is fresh before re-rendering
+        currentUserId = auth.getCurrentUser()?.id || null;
+        const { data: updatedData, error: fetchError } = await supabase.from('meme_leaderboard')
+          .select('*').order('like_count', { ascending: false }).limit(50);
+        if (fetchError) {
+          console.error('Error refetching leaderboard after change:', fetchError);
+        } else {
+          console.log('Feed refreshed successfully');
+          renderFeed(updatedData);
+        }
+      };
+
+      // Listen for changes in both memes and likes tables
+      supabase.channel('all-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'memes' }, refreshFeed)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, refreshFeed)
+        .subscribe((status) => {
+          console.log('Real-time subscription status:', status);
+        });
     }
 
     function renderFeed(items) {
       feed.innerHTML = '';
       items.forEach(m => {
-        const card = document.createElement('div'); card.className = 'card';
-        // Support either m.id (memes table) or m.meme_id (leaderboard view alias)
-        const rowId = (m.id !== undefined && m.id !== null) ? m.id : (m.meme_id !== undefined ? m.meme_id : null);
-        const canDelete = currentUserId && m.author_id === currentUserId && rowId !== null;
+        const card = document.createElement('div'); 
+        card.className = 'card meme-card';
+        const rowId = m.meme_id ?? m.id;
+        const canDelete = currentUserId && m.author_id === currentUserId && rowId != null;
         card.innerHTML = `
-          <img src="${m.image_url}"/>
-          <div class="likes" style="margin-top:8px; gap:12px; flex-wrap:wrap">
-            <button data-like="${rowId}">♥ Like/Unlike</button>
-            <strong>${m.like_count ?? 0}</strong> likes
-            ${canDelete ? `<button data-del="${rowId}" style="background:#fbeaea;color:#a00">Delete</button>` : ''}
+          <img src="${m.image_url}" alt="Meme"/>
+          <div class="likes">
+            <button data-like="${rowId}">❤️ ${m.like_count ?? 0}</button>
+            ${canDelete ? `<button data-del="${rowId}" class="danger-btn">🗑️ Delete</button>` : ''}
           </div>`;
         feed.appendChild(card);
       });
@@ -485,68 +1052,29 @@
       const likeBtn = e.target.closest('button[data-like]');
       const delBtn = e.target.closest('button[data-del]');
       if (!likeBtn && !delBtn) return;
+      
       const targetBtn = likeBtn || delBtn;
       targetBtn.disabled = true;
+
       try {
         if (likeBtn) {
           const memeId = likeBtn.dataset.like;
-          const { data: u } = await supabase.auth.getUser();
-          const { error: insErr } = await supabase.from('likes').insert({ meme_id: memeId, user_id: u.user.id });
-          if (insErr) {
-            await supabase.from('likes').delete().eq('meme_id', memeId).eq('user_id', u.user.id);
-          }
+          await toggleLike(memeId);
+          // Manual refresh after like action to ensure UI updates
+          currentUserId = auth.getCurrentUser()?.id || null;
+          const { data } = await supabase.from('meme_leaderboard')
+            .select('*').order('like_count', { ascending: false }).limit(50);
+          renderFeed(data);
         } else if (delBtn) {
           const memeId = delBtn.dataset.del;
           if (!memeId) { alert('Cannot determine meme id for deletion.'); return; }
           if (!confirm('Delete this meme? This cannot be undone.')) return;
           
-          // Try RPC function first (bypasses RLS issues)
-          try {
-            const { data: rpcResult, error: rpcErr } = await supabase.rpc('delete_user_meme', { meme_id: memeId });
-            if (!rpcErr && rpcResult) {
-              console.log('Delete via RPC succeeded');
-              // Remove card from UI
-              const card = delBtn.closest('.card');
-              if (card) card.remove();
-              alert('Meme deleted successfully!');
-            } else {
-              throw new Error(rpcErr?.message || 'RPC delete failed');
-            }
-          } catch (rpcError) {
-            console.warn('RPC delete failed, trying direct delete:', rpcError);
-            
-            // Fallback to direct delete with extensive debugging
-            if (!currentUserId) { 
-              const { data: u } = await supabase.auth.getUser(); 
-              currentUserId = u?.user?.id || null; 
-            }
-            
-            console.log('Direct delete attempt for memeId:', memeId, 'currentUserId:', currentUserId);
-            
-            // Try direct delete without RLS complications
-            const { data: deletedRows, error: delErr } = await supabase
-              .from('memes')
-              .delete()
-              .eq('id', memeId)
-              .eq('author_id', currentUserId)
-              .select('id');
-              
-            console.log('Direct delete result:', { deletedRows, delErr });
-            
-            if (delErr) {
-              alert('Delete failed: ' + delErr.message);
-            } else if (!deletedRows || deletedRows.length === 0) {
-              alert('Delete failed: No rows affected. Check if you own this meme or if RLS policies are blocking deletion.');
-            } else {
-              console.log('Direct delete succeeded');
-              const card = delBtn.closest('.card');
-              if (card) card.remove();
-              alert('Meme deleted successfully!');
-            }
+          const { error: rpcErr } = await supabase.rpc('delete_user_meme', { meme_id: memeId });
+          if (rpcErr) {
+            alert('Delete failed: ' + rpcErr.message);
           }
         }
-        const { data } = await supabase.from('meme_leaderboard').select('*').order('like_count', { ascending: false }).limit(50);
-        renderFeed(data);
       } finally {
         targetBtn.disabled = false;
       }
@@ -566,119 +1094,183 @@
   </script>
 </head>
 <body>
-  <h1>Meme Forge</h1>
+  <h1>🎭 Meme Forge</h1>
+  <p class="subtitle">Create, Share & Battle Epic Memes</p>
   <div class="toolbar">
-    <button id="signOut" class="hidden">Sign Out</button>
+    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">🌙</button>
+    <button id="signOut" class="hidden">👋 Sign Out</button>
   </div>
 
   <!-- AUTH -->
   <div id="authView" class="card">
-    <h3>Sign up / Sign in</h3>
-    <input id="email" placeholder="email" type="email"><br><br>
-    <input id="pass" placeholder="password" type="password"><br><br>
-    <button id="signUp">Sign Up</button>
-    <button id="signIn">Sign In</button>
-    <button id="forgotPassword" style="background:#f0f0f0;color:#666;margin-left:8px">Forgot Password?</button>
+    <h3 class="auth-header">Welcome to Meme Forge</h3>
+    <div class="auth-section">
+      <div class="form-group">
+        <label for="email">📧 Email Address</label>
+        <input id="email" placeholder="Enter your email" type="email">
+      </div>
+      <div class="form-group">
+        <label for="pass">🔒 Password</label>
+        <input id="pass" placeholder="Enter your password" type="password">
+      </div>
+      <div class="button-group">
+        <button id="signUp">✨ Sign Up</button>
+        <button id="signIn">🔑 Sign In</button>
+      </div>
+      <button id="forgotPassword" class="secondary-btn">🔄 Forgot Password?</button>
+    </div>
   </div>
 
   <!-- PASSWORD RESET -->
   <div id="resetView" class="card hidden">
-    <h3>Reset Password</h3>
+    <h3 class="secret-header">Reset Password</h3>
     <div id="resetEmailForm">
       <p>Enter your email address to receive a password reset link:</p>
-      <input id="resetEmail" placeholder="Enter your email" type="email"><br><br>
-      <button id="sendReset">Send Reset Link</button>
-      <button id="backToAuth" style="background:#f0f0f0;color:#666;margin-left:8px">Back to Sign In</button>
+      <div class="form-group">
+        <label for="resetEmail">Email Address</label>
+        <input id="resetEmail" placeholder="Enter your email" type="email">
+      </div>
+      <div class="button-group">
+        <button id="sendReset">📧 Send Reset Link</button>
+        <button id="backToAuth" class="secondary-btn">← Back to Sign In</button>
+      </div>
     </div>
     <div id="resetMemeForm" style="display:none">
-      <p>First, verify your meme password to confirm your identity:</p>
-      <label>Template:
+      <p>🛡️ First, verify your meme password to confirm your identity:</p>
+      <div class="form-group">
+        <label for="resetTpl">Template</label>
         <select id="resetTpl">
-          <option value="drake">Drake</option>
-          <option value="distracted">Distracted Boyfriend</option>
-          <option value="doge">Doge</option>
+          <option value="drake">🦆 Drake Pointing</option>
+          <option value="distracted">👀 Distracted Boyfriend</option>
+          <option value="doge">🐕 Doge</option>
         </select>
-      </label><br><br>
-      <input id="resetTop" placeholder="Top text"><br><br>
-      <div id="resetMidWrap" class="hidden">
-        <input id="resetMid" placeholder="Middle text (distracted only)">
-        <br><br>
       </div>
-      <input id="resetBot" placeholder="Bottom text"><br><br>
-      <canvas id="resetPrev" title="Preview"></canvas><br>
-      <button id="verifyMeme">Verify Meme Password</button>
+      <div class="form-group">
+        <label for="resetTop">Top Text</label>
+        <input id="resetTop" placeholder="Enter top text">
+      </div>
+      <div id="resetMidWrap" class="form-group hidden">
+        <label for="resetMid">Middle Text</label>
+        <input id="resetMid" placeholder="Enter middle text (distracted only)">
+      </div>
+      <div class="form-group">
+        <label for="resetBot">Bottom Text</label>
+        <input id="resetBot" placeholder="Enter bottom text">
+      </div>
+      <div class="preview-container">
+        <canvas id="resetPrev" title="Preview"></canvas>
+      </div>
+      <button id="verifyMeme">✅ Verify Meme Password</button>
     </div>
     <div id="resetPasswordForm" style="display:none">
-      <p>Meme password verified! Now enter your new account password:</p>
-      <input id="newPassword" placeholder="New password" type="password"><br><br>
-      <input id="confirmPassword" placeholder="Confirm new password" type="password"><br><br>
-      <button id="updatePassword">Update Password</button>
+      <div class="success-message">✅ Meme password verified! Now enter your new account password:</div>
+      <div class="form-group">
+        <label for="newPassword">New Password</label>
+        <input id="newPassword" placeholder="Enter new password" type="password">
+      </div>
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password</label>
+        <input id="confirmPassword" placeholder="Confirm new password" type="password">
+      </div>
+      <button id="updatePassword">🔐 Update Password</button>
     </div>
   </div>
 
   <!-- SETUP MEME PASSWORD (once) -->
   <div id="setupView" class="card hidden">
-    <h3>Set your Meme Password (one-time)</h3>
-    <label>Template:
+    <h3>🛡️ Set Your Meme Password</h3>
+    <p>Create a unique meme-based password for extra security!</p>
+    <div class="form-group">
+      <label for="sTpl">Choose Template</label>
       <select id="sTpl">
-        <option value="drake">Drake</option>
-        <option value="distracted">Distracted Boyfriend</option>
-        <option value="doge">Doge</option>
+        <option value="drake">🧔🏽‍♂️ Drake Pointing</option>
+        <option value="distracted">👀 Distracted Boyfriend</option>
+        <option value="doge">🐕 Doge</option>
       </select>
-    </label><br><br>
-    <input id="sTop" placeholder="Top text"><br><br>
-    <div id="sMidWrap" class="hidden">
-      <input id="sMid" placeholder="Middle text (distracted only)">
-      <br><br>
     </div>
-    <input id="sBot" placeholder="Bottom text"><br><br>
-  <canvas id="sPrev" title="Preview"></canvas><br>
-    <button id="sSave">Save Meme Password</button>
+    <div class="form-group">
+      <label for="sTop">Top Text</label>
+      <input id="sTop" placeholder="Enter top text">
+    </div>
+    <div id="sMidWrap" class="form-group hidden">
+      <label for="sMid">Middle Text</label>
+      <input id="sMid" placeholder="Enter middle text (distracted only)">
+    </div>
+    <div class="form-group">
+      <label for="sBot">Bottom Text</label>
+      <input id="sBot" placeholder="Enter bottom text">
+    </div>
+    <div class="preview-container">
+      <canvas id="sPrev" title="Preview"></canvas>
+    </div>
+    <button id="sSave">💾 Save Meme Password</button>
   </div>
 
   <!-- VERIFY MEME PASSWORD (every login) -->
   <div id="verifyView" class="card hidden">
-    <h3>Verify your Meme Password</h3>
-    <label>Template:
+    <h3>🔐 Verify Your Meme Password</h3>
+    <p>Enter your meme password to access the app</p>
+    <div class="form-group">
+      <label for="vTpl">Template</label>
       <select id="vTpl">
-        <option value="drake">Drake</option>
-        <option value="distracted">Distracted Boyfriend</option>
-        <option value="doge">Doge</option>
+        <option value="drake">🧔🏽‍♂️ Drake Pointing</option>
+        <option value="distracted">👀 Distracted Boyfriend</option>
+        <option value="doge">🐕 Doge</option>
       </select>
-    </label><br><br>
-    <input id="vTop" placeholder="Top text"><br><br>
-    <div id="vMidWrap" class="hidden">
-      <input id="vMid" placeholder="Middle text (distracted only)">
-      <br><br>
     </div>
-    <input id="vBot" placeholder="Bottom text"><br><br>
-  <canvas id="vPrev" title="Preview"></canvas><br>
-    <button id="vCheck">Verify & Continue</button>
+    <div class="form-group">
+      <label for="vTop">Top Text</label>
+      <input id="vTop" placeholder="Enter top text">
+    </div>
+    <div id="vMidWrap" class="form-group hidden">
+      <label for="vMid">Middle Text</label>
+      <input id="vMid" placeholder="Enter middle text (distracted only)">
+    </div>
+    <div class="form-group">
+      <label for="vBot">Bottom Text</label>
+      <input id="vBot" placeholder="Enter bottom text">
+    </div>
+    <div class="preview-container">
+      <canvas id="vPrev" title="Preview"></canvas>
+    </div>
+    <button id="vCheck">✅ Verify & Continue</button>
   </div>
 
   <!-- APP -->
   <div id="appView" class="hidden">
     <div class="row">
       <div class="card">
-        <h3>Create Meme</h3>
-        <label>Template:
+        <h3>🎨 Create Your Meme</h3>
+        <div class="form-group">
+          <label for="template">Choose Template</label>
           <select id="template">
-            <option value="drake">Drake</option>
-            <option value="distracted">Distracted Boyfriend</option>
-            <option value="doge">Doge</option>
-    </select>
-  </label><br><br>
-        <input id="top" placeholder="Top text" /><br><br>
-        <div id="middleWrap" class="hidden">
-          <input id="middle" placeholder="Middle text (distracted only)" />
-          <br><br>
+            <option value="drake">🧔🏽‍♂️ Drake Pointing</option>
+            <option value="distracted">👀 Distracted Boyfriend</option>
+            <option value="doge">🐕 Doge</option>
+          </select>
         </div>
-        <input id="bottom" placeholder="Bottom text" /><br><br>
-  <canvas id="c"></canvas><br>
-  <button id="publish" style="margin-top:16px">Publish</button>
+        <div class="form-group">
+          <label for="top">Top Text</label>
+          <input id="top" placeholder="Enter top text" />
+        </div>
+        <div id="middleWrap" class="form-group hidden">
+          <label for="middle">Middle Text</label>
+          <input id="middle" placeholder="Enter middle text (distracted only)" />
+        </div>
+        <div class="form-group">
+          <label for="bottom">Bottom Text</label>
+          <input id="bottom" placeholder="Enter bottom text" />
+        </div>
+        <div class="preview-container">
+          <canvas id="c"></canvas>
+        </div>
+        <button id="publish">🚀 Publish Meme</button>
       </div>
       <div>
-        <div class="card"><h3>🏆 Leaderboard</h3><div id="feed"></div></div>
+        <div class="card">
+          <h3>🔥 Top memes by community votes</h3>
+          <div id="feed"></div>
+        </div>
       </div>
     </div>
   </div>
