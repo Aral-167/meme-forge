@@ -59,7 +59,3 @@ Welcome to Meme Forge, a dynamic web application where you can create, share, an
 4.  **Create Memes**: Use the editor to select a template, add text, and publish your creation.
 5.  **Vote**: Browse the real-time feed and upvote your favorite memes.
 6.  **Toggle Theme**: Use the 🌙/☀️ icon in the toolbar to switch between dark and light mode.
-
----
-
-This README provides a comprehensive overview of the Meme Forge application, its features, and the steps required to get it up and running.
