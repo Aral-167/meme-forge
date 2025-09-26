@@ -267,167 +267,38 @@
 
     const SUPABASE_URL = 'https://ycmozdaoyqarwwpxudxa.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbW96ZGFveXFhcnd3cHh1ZHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3MTkyNTgsImV4cCI6MjA3MTI5NTI1OH0.nFCCRHbEWibEfS5fdV77s0iyaxr8TsG0q-LRdK0zhAg';
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Expose supabase globally for DevTools debugging (read-only usage recommended)
+  window.supabase = supabase;
 
-    // Custom Auth System
-    class CustomAuth {
-      constructor() {
-        this.currentUser = null;
-        this.sessionKey = 'meme_forge_session';
-        this.loadSession();
+    // --- Supabase Auth Migration (Option B) ---
+    // Replace custom local auth with Supabase managed auth so RLS can rely on auth.uid().
+    let currentUser = null; // Supabase user object
+    const auth = {
+      getCurrentUser: () => currentUser,
+      isAuthenticated: () => !!currentUser
+    };
+    window.auth = auth; // expose for console debugging
+    let currentUserId = null;
+
+    async function initAuthListener() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        currentUser = session.user;
+        currentUserId = session.user.id;
       }
-
-      // Generate a simple hash (in production, use proper bcrypt)
-      async hashPassword(password) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(password + 'meme_forge_salt');
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      }
-
-      generateUserId() {
-        return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      }
-
-      generateSessionToken() {
-        return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 16);
-      }
-
-      saveSession(user, token) {
-        const session = { user, token, expires: Date.now() + (7 * 24 * 60 * 60 * 1000) }; // 7 days
-        localStorage.setItem(this.sessionKey, JSON.stringify(session));
-        this.currentUser = user;
-      }
-
-      loadSession() {
-        try {
-          const stored = localStorage.getItem(this.sessionKey);
-          if (!stored) return false;
-          const session = JSON.parse(stored);
-          if (session.expires < Date.now()) {
-            this.clearSession();
-            return false;
-          }
-          this.currentUser = session.user;
-          return true;
-        } catch {
-          this.clearSession();
-          return false;
+      await refreshSession();
+      supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session?.user) {
+          currentUser = session.user;
+          currentUserId = session.user.id;
+        } else {
+          currentUser = null;
+          currentUserId = null;
         }
-      }
-
-      clearSession() {
-        localStorage.removeItem(this.sessionKey);
-        this.currentUser = null;
-      }
-
-      isAuthenticated() {
-        return this.currentUser !== null;
-      }
-
-      getCurrentUser() {
-        return this.currentUser;
-      }
-
-      async signUp(email, password) {
-        try {
-          const hashedPassword = await this.hashPassword(password);
-          const userId = this.generateUserId();
-          
-          // Check if user already exists
-          const { data: existing } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', email.toLowerCase())
-            .single();
-          
-          if (existing) {
-            throw new Error('User already exists with this email');
-          }
-
-          // Create user record
-          const { data, error } = await supabase
-            .from('users')
-            .insert({
-              id: userId,
-              email: email.toLowerCase(),
-              password_hash: hashedPassword,
-              created_at: new Date().toISOString()
-            })
-            .select()
-            .single();
-
-          if (error) throw error;
-
-          // Create profile record
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              user_id: userId,
-              email: email.toLowerCase()
-            });
-
-          if (profileError) {
-            console.warn('Profile creation failed:', profileError.message);
-            // Don't fail the signup if profile creation fails
-          }
-
-          return { success: true, user: data };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }
-
-      async signIn(email, password) {
-        try {
-          const hashedPassword = await this.hashPassword(password);
-          
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email.toLowerCase())
-            .eq('password_hash', hashedPassword)
-            .single();
-
-          if (error || !data) {
-            throw new Error('Invalid email or password');
-          }
-
-          const sessionToken = this.generateSessionToken();
-          const user = { id: data.id, email: data.email };
-          
-          this.saveSession(user, sessionToken);
-          return { success: true, user };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }
-
-      signOut() {
-        this.clearSession();
-        return { success: true };
-      }
-
-      async resetPassword(email, newPassword) {
-        try {
-          const hashedPassword = await this.hashPassword(newPassword);
-          
-          const { error } = await supabase
-            .from('users')
-            .update({ password_hash: hashedPassword })
-            .eq('email', email.toLowerCase());
-
-          if (error) throw error;
-          return { success: true };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }
+        await refreshSession();
+      });
     }
-
-    const auth = new CustomAuth();
-    let currentUserId = auth.getCurrentUser()?.id || null;
 
     // ---------- Elements ----------
     const $ = (q) => document.querySelector(q);
@@ -590,9 +461,8 @@
         return;
       }
       
-      if (!auth.isAuthenticated()) return show(authView);
-      // cache current user id
-      currentUserId = auth.getCurrentUser().id;
+  if (!auth.isAuthenticated()) return show(authView);
+  currentUserId = auth.getCurrentUser().id;
 
       // does user have meme secret saved?
       const { data: prof } = await supabase.from('profiles').select('meme_template_key').eq('user_id', currentUserId).single();
@@ -614,21 +484,26 @@
 
     // ---------- Auth ----------
     signUpBtn.onclick = async () => {
-      const result = await auth.signUp(emailIn.value, passIn.value);
-      if (result.error) return alert(result.error);
-      currentUserId = result.user.id;
-      show(setupView);
+      if (!emailIn.value || !passIn.value) return alert('Email & password required');
+      const { data, error } = await supabase.auth.signUp({ email: emailIn.value.trim(), password: passIn.value });
+      if (error) return alert(error.message);
+      if (data.user) {
+        currentUser = data.user; currentUserId = data.user.id;
+        // create / upsert profile row so meme secret can bind to user
+        supabase.from('profiles').upsert({ user_id: currentUserId, email: data.user.email }, { onConflict: 'user_id' });
+        show(setupView);
+      } else {
+        alert('Sign up initiated. If email confirmation is enabled, confirm your email then sign in.');
+      }
     };
     signInBtn.onclick = async () => {
-      const result = await auth.signIn(emailIn.value, passIn.value);
-      if (result.error) return alert(result.error);
-      currentUserId = result.user.id;
-      show(verifyView);
+      const { data, error } = await supabase.auth.signInWithPassword({ email: emailIn.value.trim(), password: passIn.value });
+      if (error) return alert(error.message);
+      if (data.user) { currentUser = data.user; currentUserId = data.user.id; show(verifyView); }
     };
     signOutBtn.onclick = async () => {
-      auth.signOut();
-      currentUserId = null;
-      show(authView);
+      await supabase.auth.signOut();
+      currentUser = null; currentUserId = null; show(authView);
     };
 
     // ---------- Password Reset ----------
@@ -647,24 +522,10 @@
       }
       
       // Check if user exists
-      const { data: user } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', resetEmailIn.value.toLowerCase())
-        .single();
-        
-      if (!user) {
-        alert('No account found with this email address.');
-        return;
-      }
-      
-      // Store email for reset process
-      window.resetEmail = resetEmailIn.value.toLowerCase();
-      
-      // Show meme verification form directly (no email link needed)
-      document.getElementById('resetEmailForm').style.display = 'none';
-      document.getElementById('resetMemeForm').style.display = 'block';
-      alert('Please verify your meme password to proceed with password reset.');
+      // Use Supabase's password reset email (meme verification flow kept as optional extra step if desired)
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmailIn.value.trim());
+      if (error) return alert(error.message);
+      alert('If that email exists, a password recovery link was sent. (Meme verification flow now optional.)');
     };
 
     verifyMemeBtn.onclick = async () => {
@@ -694,42 +555,13 @@
     };
 
     updatePassBtn.onclick = async () => {
-      if (!newPassIn.value || !confirmPassIn.value) {
-        alert('Please fill in both password fields.');
-        return;
-      }
-      if (newPassIn.value !== confirmPassIn.value) {
-        alert('Passwords do not match.');
-        return;
-      }
-      if (newPassIn.value.length < 6) {
-        alert('Password must be at least 6 characters long.');
-        return;
-      }
-      
-      if (!window.resetEmail) {
-        alert('Reset session expired. Please start over.');
-        show(authView);
-        return;
-      }
-      
-      const result = await auth.resetPassword(window.resetEmail, newPassIn.value);
-      if (!result.success) return alert(result.error);
-      
-      // Clear reset session
-      delete window.resetEmail;
-      
-      alert('Password updated successfully! You can now sign in with your new password.');
+      alert('Password change must be completed via the recovery email link (Supabase auth).');
       show(authView);
     };
 
     // ---------- Meme password setup (once) ----------
     sSave.onclick = async () => {
-      if (!currentUserId) {
-        alert('User session expired. Please sign in again.');
-        show(authView);
-        return;
-      }
+      if (!currentUserId) { alert('Session expired'); show(authView); return; }
       
       const argsBase = { 
         template_key: sTpl.value, 
@@ -749,11 +581,7 @@
 
     // ---------- Verify meme password (each login) ----------
     vCheck.onclick = async () => {
-      if (!currentUserId) {
-        alert('User session expired. Please sign in again.');
-        show(authView);
-        return;
-      }
+      if (!currentUserId) { alert('Session expired'); show(authView); return; }
       
       const argsBase = { 
         template_key: vTpl.value, 
@@ -914,18 +742,42 @@
       publishBtn.disabled = true;
       try {
         const user = auth.getCurrentUser();
-        if (!user || !user.id) {
-          alert('You must be logged in to publish. Please refresh and sign in.');
+        console.log('[publish] Starting publish with user:', user);
+        if (!user || !user.id) { alert('You must be logged in to publish.'); return; }
+
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
+        if (!blob) {
+          alert('Failed to generate image blob from canvas. Try again.');
           return;
         }
 
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
-        const fileName = `memes/${Date.now()}.png`;
-        const { data: upload, error: upErr } = await supabase.storage.from('memes').upload(fileName, blob, {
-          contentType: 'image/png', upsert: false
-        });
-        if (upErr) throw upErr;
+        // Add a short random suffix to further reduce collision risk
+        const rand = Math.random().toString(36).slice(2, 8);
+        // IMPORTANT: The bucket name is 'memes'; inside it we store objects under optional folders.
+        // Earlier we used 'memes/filename' which results in a URL path /object/memes/memes/filename (double segment) causing 400.
+        const objectKey = `${Date.now()}_${rand}.png`; // store at root of bucket first
+        console.log('[publish] Preparing upload', { objectKey, size: blob.size, type: blob.type, user: user.id });
+
+        async function attemptUpload(key) {
+          return await supabase.storage
+            .from('memes')
+            .upload(key, blob, { contentType: 'image/png', upsert: false });
+        }
+
+        let upload, upErr;
+        ({ data: upload, error: upErr } = await attemptUpload(objectKey));
+        if (upErr) {
+            console.warn('[publish] Root upload failed, trying in subfolder', upErr);
+            const altKey = `generated/${objectKey}`;
+            ({ data: upload, error: upErr } = await attemptUpload(altKey));
+            if (upErr) {
+              console.error('[publish] Upload error after fallback:', upErr);
+              throw new Error(`Storage upload failed (both attempts). Code: ${upErr?.status || 'n/a'} Msg: ${upErr?.message || upErr}`);
+            }
+        }
+        if (!upload?.path) throw new Error('Upload returned no path.');
         const { data: url } = supabase.storage.from('memes').getPublicUrl(upload.path);
+        console.log('[publish] Upload success', { path: upload.path, publicUrl: url.publicUrl });
 
         // Prepare meme data with optional middle text
         const memeData = {
@@ -941,12 +793,18 @@
           memeData.mid_text = midIn.value;
         }
 
+        console.log('[publish] Attempting to insert meme data:', memeData);
         const { error: dbErr } = await supabase.from('memes').insert(memeData);
-        if (dbErr) throw dbErr;
+        console.log('[publish] Database insert result:', { error: dbErr });
+        if (dbErr) {
+          console.error('[publish] DB insert error:', dbErr, memeData);
+          throw new Error(`Database insert failed: ${dbErr.message}`);
+        }
 
-        alert('Published!');
+        alert('Published! (Check console for diagnostic details)');
       } catch (e) {
-        alert(e.message);
+        console.error('[publish] Failed:', e);
+        alert('Publish failed: ' + (e.message || e));
       } finally {
         publishBtn.disabled = false;
       }
@@ -1090,7 +948,7 @@
   vTpl.addEventListener('change', ()=> togglePasswordMid(vTpl, vMidWrap));
   resetTpl.addEventListener('change', ()=> togglePasswordMid(resetTpl, resetMidWrap));
   togglePasswordMid(sTpl, sMidWrap); togglePasswordMid(vTpl, vMidWrap); togglePasswordMid(resetTpl, resetMidWrap);
-  refreshSession();
+  initAuthListener();
   </script>
 </head>
 <body>
